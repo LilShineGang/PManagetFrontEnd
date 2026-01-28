@@ -1,4 +1,4 @@
-package ies.sequeros.com.dam.pmdm.administrador.ui.login
+package bg.pm.ui.login
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
