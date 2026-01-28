@@ -1,4 +1,4 @@
-package ies.sequeros.com.dam.pmdm.administrador.ui.login
+package bg.pm.ui.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -58,8 +58,12 @@ class LoginViewModel(
                                 _mensajeError.value = "Usuario '${_usuario.value}' no encontrado"
                             }
 
+                            usuario.password != _contrasena.value -> {
+                                _mensajeError.value = "Contraseña incorrecta"
+                            }
+
                             else -> {
-                                // Todo correcto
+                                // Credenciales correctas
                                 _mensajeError.value = null
                                 onSuccess()
                             }
