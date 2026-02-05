@@ -2,15 +2,14 @@ package bg.pm.ui.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import bg.pm.modelo.IUsuarioRepositorio
+import bg.pm.network.ApiService
+import bg.pm.network.LoginRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class LoginViewModel(
-    private val usuarioRepositorio: IUsuarioRepositorio,
-) : ViewModel() {
+class LoginViewModel : ViewModel() {
     
     private val _usuario = MutableStateFlow("")
     val usuario: StateFlow<String> = _usuario.asStateFlow()
@@ -43,13 +42,16 @@ class LoginViewModel(
                 onSuccess()
             }
             else -> {
-                // Validar contra la base de datos
                 _isValidating.value = true
                 _mensajeError.value = null
                 viewModelScope.launch {
                     try {
-                        // Buscar por nombre (trim para eliminar espacios)
-                        val usuario = usuarioRepositorio.findByName(_usuario.value.trim())
+                        // Llamar a la API de login
+                        val loginRequest = LoginRequest(
+                            username = _usuario.value.trim(),
+                            password = _contrasena.value
+                        )
+                        val response = ApiService.validarLogin(loginRequest)
                         
                         _isValidating.value = false
                         
@@ -66,6 +68,12 @@ class LoginViewModel(
                                 // Credenciales correctas
                                 _mensajeError.value = null
                                 onSuccess()
+                            }
+                            response.message != null -> {
+                                _mensajeError.value = response.message
+                            }
+                            else -> {
+                                _mensajeError.value = "Error de autenticación"
                             }
                         }
                     } catch (e: Exception) {
