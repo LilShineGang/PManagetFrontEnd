@@ -56,8 +56,16 @@ class LoginViewModel : ViewModel() {
                         _isValidating.value = false
                         
                         when {
-                            response.access_token != null -> {
-                                // Login exitoso
+                            usuario == null -> {
+                                _mensajeError.value = "Usuario '${_usuario.value}' no encontrado"
+                            }
+
+                            usuario.password != _contrasena.value -> {
+                                _mensajeError.value = "Contraseña incorrecta"
+                            }
+
+                            else -> {
+                                // Credenciales correctas
                                 _mensajeError.value = null
                                 onSuccess()
                             }
