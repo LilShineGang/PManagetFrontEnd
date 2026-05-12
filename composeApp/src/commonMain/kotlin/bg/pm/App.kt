@@ -15,11 +15,25 @@ import bg.pm.ui.login.LoginViewModel
 import bg.pm.ui.login.RegisterUsuario
 import bg.pm.ui.login.RegisterViewModel
 import bg.pm.ui.theme.PManagerTheme
+import coil3.ImageLoader
+import coil3.network.ktor3.KtorNetworkFetcherFactory
+import coil3.compose.LocalPlatformContext
+import androidx.compose.runtime.CompositionLocalProvider
+import bg.pm.ui.LocalAppImageLoader
 
 private enum class Pantalla { CARGANDO, LOGIN, REGISTRO, PRINCIPAL }
 
 @Composable
 fun App() {
+    val platformContext = LocalPlatformContext.current
+    val imageLoader = remember(platformContext) {
+        ImageLoader.Builder(platformContext)
+            .components {
+                add(KtorNetworkFetcherFactory())
+            }
+            .build()
+    }
+    CompositionLocalProvider(LocalAppImageLoader provides imageLoader) {
     PManagerTheme {
         var pantalla by remember { mutableStateOf(Pantalla.CARGANDO) }
         val loginViewModel = remember { LoginViewModel() }
@@ -57,6 +71,7 @@ fun App() {
             )
         }
     }
+    } // CompositionLocalProvider
 }
 
 private suspend fun tryAutoLogin(): Boolean {
