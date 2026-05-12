@@ -8,6 +8,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -79,7 +82,7 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
             TopAppBar(
                 title = {
                     Text(
-                        "PManager",
+                        "Glyph",
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary,
                         fontSize = 22.sp
@@ -216,34 +219,52 @@ private fun GameCarouselCard(juego: GameOut) {
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().padding(20.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Big letter as placeholder image
-            Text(
-                text = juego.name.first().uppercaseChar().toString(),
-                fontSize = 72.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
-                modifier = Modifier.align(Alignment.CenterEnd)
-            )
-            Column(modifier = Modifier.align(Alignment.BottomStart)) {
+            if (juego.image != null) {
+                AsyncImage(
+                    model = juego.image,
+                    imageLoader = LocalAppImageLoader.current,
+                    contentDescription = juego.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    onError = { println("Coil error loading '${juego.image}': ${it.result.throwable}") }
+                )
+                // overlay oscuro para legibilidad del texto
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.40f))
+                )
+            } else {
+                // placeholder letra grande
+                Text(
+                    text = juego.name.first().uppercaseChar().toString(),
+                    fontSize = 72.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(20.dp)
+                )
+            }
+            val textColor = if (juego.image != null) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+            Column(modifier = Modifier.align(Alignment.BottomStart).padding(20.dp)) {
                 Text(
                     text = juego.name,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 20.sp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = textColor
                 )
                 Text(
                     text = "${juego.category} · ${juego.gender}",
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                    color = textColor.copy(alpha = 0.75f)
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = juego.difficulty,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = textColor,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier
                             .background(
@@ -257,7 +278,7 @@ private fun GameCarouselCard(juego: GameOut) {
                         Text(
                             text = "★ $it",
                             fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            color = textColor,
                             fontWeight = FontWeight.Medium
                         )
                     }
