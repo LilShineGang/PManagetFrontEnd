@@ -55,4 +55,15 @@ object ApiService {
             throw Exception("Error al obtener juegos: ${e.message}")
         }
     }
+
+    suspend fun refreshToken(refreshToken: String): LoginResponse {
+        return try {
+            client.post("$BASE_URL/users/refresh/") {
+                contentType(ContentType.Application.Json)
+                setBody(RefreshRequest(refresh_token = refreshToken))
+            }.body()
+        } catch (e: Exception) {
+            throw Exception("Error al refrescar sesión: ${e.message}")
+        }
+    }
 }

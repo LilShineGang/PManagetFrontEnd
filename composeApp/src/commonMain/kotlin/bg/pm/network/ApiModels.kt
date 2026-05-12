@@ -30,8 +30,14 @@ data class LoginRequest(
 @Serializable
 data class LoginResponse(
     val access_token: String? = null,
+    val refresh_token: String? = null,
     val token_type: String? = null,
     val detail: String? = null
+)
+
+@Serializable
+data class RefreshRequest(
+    val refresh_token: String
 )
 
 @Serializable
