@@ -66,4 +66,24 @@ object ApiService {
             throw Exception("Error al refrescar sesión: ${e.message}")
         }
     }
+
+    suspend fun obtenerForos(token: String): List<ForumOut> {
+        return try {
+            client.get("$BASE_URL/forums/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            throw Exception("Error al obtener foros: ${e.message}")
+        }
+    }
+
+    suspend fun obtenerChats(token: String): List<ChatOut> {
+        return try {
+            client.get("$BASE_URL/chats/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            throw Exception("Error al obtener chats: ${e.message}")
+        }
+    }
 }
