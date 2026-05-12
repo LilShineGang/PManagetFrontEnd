@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import bg.pm.network.ApiService
 import bg.pm.network.LoginRequest
 import bg.pm.network.SessionManager
+import bg.pm.network.TokenStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,9 +54,11 @@ class LoginViewModel : ViewModel() {
                 )
                 _isValidating.value = false
 
-                if (response.access_token != null) {
+                if (response.access_token != null && response.refresh_token != null) {
+                    val uname = _usuario.value.trim()
+                    TokenStorage.saveTokens(response.access_token, response.refresh_token, uname)
                     SessionManager.accessToken = response.access_token
-                    SessionManager.username = _usuario.value.trim()
+                    SessionManager.username = uname
                     onSuccess()
                 } else {
                     _mensajeError.value = response.detail ?: "Credenciales incorrectas"
