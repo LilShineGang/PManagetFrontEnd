@@ -50,3 +50,19 @@ data class GameOut(
     val image: String? = null,
     val category: String
 )
+
+@Serializable
+data class ForumOut(
+    val id_forum: Int,
+    val name: String,
+    val id_game: Int? = null,
+    val id_user: Int? = null
+)
+
+@Serializable
+data class ChatOut(
+    val id_chat: Int,
+    val id_mi: Int,
+    val content: String,
+    val timestamp: String? = null
+)
