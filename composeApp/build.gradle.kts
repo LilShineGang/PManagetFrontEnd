@@ -55,6 +55,10 @@ kotlin {
             
             // Serialization
             implementation(libs.kotlinx.serialization.json)
+
+            // Image loading
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
