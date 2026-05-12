@@ -14,29 +14,39 @@ data class SignupRequest(
 
 @Serializable
 data class SignupResponse(
-    val id: String? = null,
+    val id: Int? = null,
     val username: String? = null,
     val email: String? = null,
     val name: String? = null,
     val role: String? = null,
-    val message: String? = null
+    val image: String? = null
 )
 
-@Serializable
 data class LoginRequest(
-    val grant_type: String = "password",
     val username: String,
-    val password: String,
-    val scope: String = "",
-    val client_id: String? = null,
-    val client_secret: String? = null
+    val password: String
 )
 
 @Serializable
 data class LoginResponse(
     val access_token: String? = null,
+    val refresh_token: String? = null,
     val token_type: String? = null,
-    val id: String? = null,
-    val username: String? = null,
-    val message: String? = null
+    val detail: String? = null
+)
+
+@Serializable
+data class RefreshRequest(
+    val refresh_token: String
+)
+
+@Serializable
+data class GameOut(
+    val id_game: Int,
+    val name: String,
+    val gender: String,
+    val difficulty: String,
+    val rating: Double? = null,
+    val image: String? = null,
+    val category: String
 )
