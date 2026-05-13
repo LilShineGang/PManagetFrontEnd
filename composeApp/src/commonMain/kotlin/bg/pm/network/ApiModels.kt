@@ -52,6 +52,26 @@ data class GameOut(
 )
 
 @Serializable
+data class GameIn(
+    val name: String,
+    val gender: String,
+    val difficulty: String,
+    val rating: Double? = null,
+    val image: String? = null,
+    val category: String
+)
+
+@Serializable
+data class UserOut(
+    val id: Int,
+    val name: String,
+    val username: String,
+    val email: String,
+    val image: String? = null,
+    val role: String
+)
+
+@Serializable
 data class ForumOut(
     val id_forum: Int,
     val name: String,
@@ -65,4 +85,31 @@ data class ChatOut(
     val id_mi: Int,
     val content: String,
     val timestamp: String? = null
+)
+
+@Serializable
+data class WikiOut(
+    val id_wiki: Int,
+    val name: String,
+    val category: String? = null,
+    val description: String? = null,
+    val id_forum: Int? = null
+)
+
+@Serializable
+data class BuildOut(
+    val id_build: Int,
+    val name: String,
+    val planner: String,
+    val category: String,
+    val description: String,
+    val id_forum: Int? = null
+)
+
+@Serializable
+data class AchievementOut(
+    val id_achievement: Int,
+    val difficulty: String,
+    val description: String,
+    val id_game: Int? = null
 )
