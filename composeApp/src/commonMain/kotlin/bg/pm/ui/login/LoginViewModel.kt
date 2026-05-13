@@ -59,6 +59,9 @@ class LoginViewModel : ViewModel() {
                     TokenStorage.saveTokens(response.access_token, response.refresh_token, uname)
                     SessionManager.accessToken = response.access_token
                     SessionManager.username = uname
+                    // fetch role
+                    val perfil = ApiService.obtenerPerfil(response.access_token)
+                    SessionManager.role = perfil?.role
                     onSuccess()
                 } else {
                     _mensajeError.value = response.detail ?: "Credenciales incorrectas"

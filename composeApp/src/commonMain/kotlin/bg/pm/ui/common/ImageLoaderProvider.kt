@@ -1,4 +1,4 @@
-package bg.pm.ui
+package bg.pm.ui.common
 
 import androidx.compose.runtime.compositionLocalOf
 import coil3.ImageLoader

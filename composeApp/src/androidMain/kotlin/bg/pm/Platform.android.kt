@@ -7,3 +7,7 @@ class AndroidPlatform : Platform {
 }
 
 actual fun getPlatform(): Platform = AndroidPlatform()
+
+actual fun pickImageFile(callback: (String?) -> Unit) {
+    ImagePickerHolder.pick(callback)
+}
