@@ -5,3 +5,5 @@ class WasmPlatform: Platform {
 }
 
 actual fun getPlatform(): Platform = WasmPlatform()
+
+actual fun pickImageFile(callback: (String?) -> Unit) { callback(null) }

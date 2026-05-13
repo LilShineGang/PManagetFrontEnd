@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import bg.pm.network.ApiService
 import bg.pm.network.SessionManager
 import bg.pm.network.TokenStorage
-import bg.pm.ui.PantallaPrincipal
+import bg.pm.ui.home.PantallaPrincipal
 import bg.pm.ui.login.LoginAdministrador
 import bg.pm.ui.login.LoginViewModel
 import bg.pm.ui.login.RegisterUsuario
@@ -19,7 +19,7 @@ import coil3.ImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.compose.LocalPlatformContext
 import androidx.compose.runtime.CompositionLocalProvider
-import bg.pm.ui.LocalAppImageLoader
+import bg.pm.ui.common.LocalAppImageLoader
 
 private enum class Pantalla { CARGANDO, LOGIN, REGISTRO, PRINCIPAL }
 
@@ -82,6 +82,8 @@ private suspend fun tryAutoLogin(): Boolean {
         TokenStorage.isAccessTokenValid() -> {
             SessionManager.accessToken = accessToken
             SessionManager.username = username
+            val perfil = ApiService.obtenerPerfil(accessToken)
+            SessionManager.role = perfil?.role
             true
         }
         TokenStorage.isRefreshTokenValid() -> {
@@ -92,6 +94,8 @@ private suspend fun tryAutoLogin(): Boolean {
                     TokenStorage.saveTokens(response.access_token, response.refresh_token, username)
                     SessionManager.accessToken = response.access_token
                     SessionManager.username = username
+                    val perfil = ApiService.obtenerPerfil(response.access_token)
+                    SessionManager.role = perfil?.role
                     true
                 } else {
                     TokenStorage.clear()

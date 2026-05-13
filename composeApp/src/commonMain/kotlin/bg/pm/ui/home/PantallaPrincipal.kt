@@ -1,7 +1,8 @@
-package bg.pm.ui
+package bg.pm.ui.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,66 +17,64 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import bg.pm.network.ApiService
 import bg.pm.network.ChatOut
 import bg.pm.network.ForumOut
+import bg.pm.network.GameIn
 import bg.pm.network.GameOut
 import bg.pm.network.SessionManager
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-
-class PantallaPrincipalViewModel : ViewModel() {
-    private val _juegos = MutableStateFlow<List<GameOut>>(emptyList())
-    val juegos: StateFlow<List<GameOut>> = _juegos.asStateFlow()
-
-    private val _foros = MutableStateFlow<List<ForumOut>>(emptyList())
-    val foros: StateFlow<List<ForumOut>> = _foros.asStateFlow()
-
-    private val _chats = MutableStateFlow<List<ChatOut>>(emptyList())
-    val chats: StateFlow<List<ChatOut>> = _chats.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
-
-    fun cargarDatos() {
-        val token = SessionManager.accessToken ?: return
-        _isLoading.value = true
-        _error.value = null
-        viewModelScope.launch {
-            try {
-                _juegos.value = ApiService.obtenerJuegos(token)
-                _foros.value = ApiService.obtenerForos(token)
-                _chats.value = ApiService.obtenerChats(token)
-            } catch (e: Exception) {
-                _error.value = "Error al cargar datos: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-}
+import bg.pm.pickImageFile
+import bg.pm.ui.common.LocalAppImageLoader
+import bg.pm.ui.game.GameDetailScreen
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
+    var juegoSeleccionado by remember { mutableStateOf<bg.pm.network.GameOut?>(null) }
+
+    if (juegoSeleccionado != null) {
+        GameDetailScreen(
+            juego = juegoSeleccionado!!,
+            onVolver = { juegoSeleccionado = null }
+        )
+        return
+    }
+
     val viewModel = remember { PantallaPrincipalViewModel() }
     val juegos by viewModel.juegos.collectAsState()
     val foros by viewModel.foros.collectAsState()
     val chats by viewModel.chats.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val isAdmin by viewModel.isAdmin.collectAsState()
+    var mostrarDialogoCrear by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.cargarDatos() }
+
+    // ── Diálogo crear juego ───────────────────────────────────────────
+    if (mostrarDialogoCrear) {
+        CrearJuegoDialog(
+            onDismiss = { mostrarDialogoCrear = false },
+            onCreate = { game ->
+                scope.launch {
+                    try {
+                        val token = SessionManager.accessToken ?: return@launch
+                        ApiService.crearJuego(game, token)
+                        mostrarDialogoCrear = false
+                        viewModel.cargarDatos()
+                    } catch (e: Exception) { /* ignore */ }
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -129,20 +128,88 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
             ) {
                 // ── CARRUSEL DE JUEGOS ──────────────────────────────────
                 item {
-                    SectionHeader("Juegos")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, top = 20.dp, bottom = 8.dp, end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Juegos",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        if (isAdmin) {
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                                    .clickable { mostrarDialogoCrear = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "+",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    lineHeight = 18.sp,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
                 }
                 item {
                     if (juegos.isEmpty()) {
                         EmptyHint("No hay juegos disponibles")
                     } else {
                         val pagerState = rememberPagerState { juegos.size }
+                        val scope = rememberCoroutineScope()
                         Column {
-                            HorizontalPager(
-                                state = pagerState,
-                                modifier = Modifier.fillMaxWidth().height(200.dp),
-                                contentPadding = PaddingValues(horizontal = 32.dp)
-                            ) { page ->
-                                GameCarouselCard(juegos[page])
+                            Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                                HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(horizontal = 48.dp)
+                                ) { page ->
+                                    GameCarouselCard(
+                                        juego = juegos[page],
+                                        onClick = { juegoSeleccionado = juegos[page] }
+                                    )
+                                }
+                                // ← botón izquierdo
+                                if (pagerState.currentPage > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.CenterStart)
+                                            .padding(start = 6.dp)
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                                            .clickable { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("‹", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
+                                // → botón derecho
+                                if (pagerState.currentPage < juegos.size - 1) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.CenterEnd)
+                                            .padding(end = 6.dp)
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+                                            .clickable { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("›", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    }
+                                }
                             }
                             Spacer(Modifier.height(8.dp))
                             Row(
@@ -209,11 +276,12 @@ private fun EmptyHint(text: String) {
 }
 
 @Composable
-private fun GameCarouselCard(juego: GameOut) {
+private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 8.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
@@ -389,3 +457,97 @@ private fun ChatCard(chat: ChatOut) {
     }
 }
 
+
+@Composable
+private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn) -> Unit) {
+    var nombre by remember { mutableStateOf("") }
+    var genero by remember { mutableStateOf("") }
+    var dificultad by remember { mutableStateOf("") }
+    var categoria by remember { mutableStateOf("") }
+    var imagen by remember { mutableStateOf("") }
+    var rating by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nuevo juego", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = nombre, onValueChange = { nombre = it },
+                    label = { Text("Nombre *") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = genero, onValueChange = { genero = it },
+                    label = { Text("Género *") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = dificultad, onValueChange = { dificultad = it },
+                    label = { Text("Dificultad *") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = categoria, onValueChange = { categoria = it },
+                    label = { Text("Categoría *") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // Selector de imagen
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Imagen (opcional)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(onClick = {
+                            pickImageFile { path -> if (path != null) imagen = path }
+                        }) {
+                            Text("Seleccionar archivo")
+                        }
+                        if (imagen.isNotBlank()) {
+                            Text(
+                                text = imagen.substringAfterLast('/').substringAfterLast('\\'),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = rating, onValueChange = { rating = it },
+                    label = { Text("Rating (0-5, opcional)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (nombre.isBlank() || genero.isBlank() || dificultad.isBlank() || categoria.isBlank()) return@Button
+                    onCreate(
+                        GameIn(
+                            name = nombre.trim(),
+                            gender = genero.trim(),
+                            difficulty = dificultad.trim(),
+                            category = categoria.trim(),
+                            image = imagen.trim().ifBlank { null },
+                            rating = rating.trim().toDoubleOrNull()
+                        )
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) { Text("Crear") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
