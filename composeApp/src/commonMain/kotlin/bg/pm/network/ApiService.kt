@@ -86,4 +86,52 @@ object ApiService {
             throw Exception("Error al obtener chats: ${e.message}")
         }
     }
+
+    suspend fun obtenerWikiPorJuego(gameId: Int, token: String): List<WikiOut> {
+        return try {
+            client.get("$BASE_URL/wiki/game/$gameId/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun obtenerBuildsPorJuego(gameId: Int, token: String): List<BuildOut> {
+        return try {
+            client.get("$BASE_URL/builds/game/$gameId/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun obtenerLogrosPorJuego(gameId: Int, token: String): List<AchievementOut> {
+        return try {
+            client.get("$BASE_URL/achievements/game/$gameId/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun obtenerPerfil(token: String): UserOut? {
+        return try {
+            client.get("$BASE_URL/users/me/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun crearJuego(game: GameIn, token: String): GameOut {
+        return client.post("$BASE_URL/games/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(game)
+        }.body()
+    }
 }
