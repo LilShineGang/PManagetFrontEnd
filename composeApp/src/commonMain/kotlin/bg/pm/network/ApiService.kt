@@ -10,9 +10,10 @@ import io.ktor.client.request.forms.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import bg.pm.getBaseUrl
 
 object ApiService {
-    private val BASE_URL = getApiBaseUrl()
+    private val BASE_URL = getBaseUrl()
 
     private val client = HttpClient {
         install(ContentNegotiation) {
