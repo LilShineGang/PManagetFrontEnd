@@ -29,9 +29,12 @@ import bg.pm.network.ChatOut
 import bg.pm.network.ForumOut
 import bg.pm.network.GameIn
 import bg.pm.network.GameOut
+import bg.pm.readPickedImageUpload
+import bg.pm.resolveAppImageUrl
 import bg.pm.network.SessionManager
 import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
+import bg.pm.ui.common.RuneBrand
 import bg.pm.ui.game.GameDetailScreen
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -63,11 +66,15 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     if (mostrarDialogoCrear) {
         CrearJuegoDialog(
             onDismiss = { mostrarDialogoCrear = false },
-            onCreate = { game ->
+            onCreate = { game, imagePath ->
                 scope.launch {
                     try {
                         val token = SessionManager.accessToken ?: return@launch
-                        ApiService.crearJuego(game, token)
+                        val createdGame = ApiService.crearJuego(game.copy(image = null), token)
+                        val imageUpload = imagePath?.takeIf { it.isNotBlank() }?.let { readPickedImageUpload(it) }
+                        if (imageUpload != null) {
+                            ApiService.subirImagenJuego(createdGame.id_game, imageUpload, token)
+                        }
                         mostrarDialogoCrear = false
                         viewModel.cargarDatos()
                     } catch (e: Exception) { /* ignore */ }
@@ -80,12 +87,7 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Glyph",
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontSize = 22.sp
-                    )
+                    RuneBrand(compact = true)
                 },
                 actions = {
                     Text(
@@ -277,6 +279,8 @@ private fun EmptyHint(text: String) {
 
 @Composable
 private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
+    val imageUrl = resolveAppImageUrl(juego.image)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -289,14 +293,14 @@ private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            if (juego.image != null) {
+            if (imageUrl != null) {
                 AsyncImage(
-                    model = juego.image,
+                    model = imageUrl,
                     imageLoader = LocalAppImageLoader.current,
                     contentDescription = juego.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    onError = { println("Coil error loading '${juego.image}': ${it.result.throwable}") }
+                    onError = { println("Coil error loading '$imageUrl': ${it.result.throwable}") }
                 )
                 // overlay oscuro para legibilidad del texto
                 Box(
@@ -314,7 +318,7 @@ private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
                     modifier = Modifier.align(Alignment.CenterEnd).padding(20.dp)
                 )
             }
-            val textColor = if (juego.image != null) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+            val textColor = if (imageUrl != null) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
             Column(modifier = Modifier.align(Alignment.BottomStart).padding(20.dp)) {
                 Text(
                     text = juego.name,
@@ -459,7 +463,7 @@ private fun ChatCard(chat: ChatOut) {
 
 
 @Composable
-private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn) -> Unit) {
+private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn, String?) -> Unit) {
     var nombre by remember { mutableStateOf("") }
     var genero by remember { mutableStateOf("") }
     var dificultad by remember { mutableStateOf("") }
@@ -538,9 +542,10 @@ private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn) -> Unit) 
                             gender = genero.trim(),
                             difficulty = dificultad.trim(),
                             category = categoria.trim(),
-                            image = imagen.trim().ifBlank { null },
+                            image = null,
                             rating = rating.trim().toDoubleOrNull()
-                        )
+                        ),
+                        imagen.trim().ifBlank { null }
                     )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

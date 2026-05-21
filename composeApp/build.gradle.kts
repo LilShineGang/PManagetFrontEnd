@@ -59,6 +59,9 @@ kotlin {
             // Image loading
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
+
+            // Navigation
+            implementation(libs.navigation.compose)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
