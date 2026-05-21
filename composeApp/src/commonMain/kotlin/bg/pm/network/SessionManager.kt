@@ -16,7 +16,11 @@ object SessionManager {
         set(value) { _role.value = value }
 
     fun isLoggedIn(): Boolean = accessToken != null
-    fun isAdmin(): Boolean = role == "admin"
+    fun isAdmin(): Boolean = isAdminRole(role)
+
+    fun isAdminRole(role: String?): Boolean {
+        return role?.trim()?.lowercase() == "admin"
+    }
 
     fun clear() {
         accessToken = null

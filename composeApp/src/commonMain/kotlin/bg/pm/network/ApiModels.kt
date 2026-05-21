@@ -80,6 +80,30 @@ data class ForumOut(
 )
 
 @Serializable
+data class WikiIn(
+    val name: String,
+    val category: String,
+    val description: String,
+    val id_forum: Int? = null
+)
+
+@Serializable
+data class BuildIn(
+    val name: String,
+    val planner: String,
+    val category: String,
+    val description: String,
+    val id_forum: Int? = null
+)
+
+@Serializable
+data class AchievementIn(
+    val difficulty: String,
+    val description: String,
+    val id_game: Int? = null
+)
+
+@Serializable
 data class ChatOut(
     val id_chat: Int,
     val id_mi: Int,

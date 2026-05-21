@@ -22,9 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import bg.pm.resolveAppImageUrl
 import bg.pm.network.AchievementOut
 import bg.pm.network.BuildOut
 import bg.pm.network.GameOut
+import bg.pm.network.SessionManager
 import bg.pm.network.WikiOut
 import bg.pm.ui.common.LocalAppImageLoader
 import coil3.compose.AsyncImage
@@ -36,16 +38,78 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
     val wikiEntries by viewModel.wikiEntries.collectAsState()
     val buildEntries by viewModel.buildEntries.collectAsState()
     val achievements by viewModel.achievements.collectAsState()
+    val forumId by viewModel.forumId.collectAsState()
     val dataLoading by viewModel.dataLoading.collectAsState()
+    val actionLoading by viewModel.actionLoading.collectAsState()
+    val actionError by viewModel.actionError.collectAsState()
+    val role by SessionManager.roleFlow.collectAsState()
     val scrollState = rememberScrollState()
     var wikiSearch by remember { mutableStateOf("") }
     var buildSearch by remember { mutableStateOf("") }
     var wikiExpanded by remember { mutableStateOf(true) }
     var buildsExpanded by remember { mutableStateOf(true) }
     var logrosExpanded by remember { mutableStateOf(true) }
+    var showCreateAchievementDialog by remember { mutableStateOf(false) }
+    var showCreateWikiDialog by remember { mutableStateOf(false) }
+    var showCreateBuildDialog by remember { mutableStateOf(false) }
+    val isLoggedIn = SessionManager.isLoggedIn()
+    val isAdmin = SessionManager.isAdminRole(role)
+    val canCreateAdminEntries = isAdmin && forumId != null && !actionLoading
+    val canCreateBuilds = isLoggedIn && forumId != null && !actionLoading
+    val plannerName = SessionManager.username?.trim().orEmpty()
+    val gameImageUrl = resolveAppImageUrl(juego.image)
 
     LaunchedEffect(juego.id_game) {
         viewModel.cargarDatos(juego.id_game)
+    }
+
+    if (showCreateAchievementDialog) {
+        CrearLogroDialog(
+            loading = actionLoading,
+            error = actionError,
+            onDismiss = {
+                viewModel.clearActionError()
+                showCreateAchievementDialog = false
+            },
+            onCreate = { difficulty, description ->
+                viewModel.crearLogro(difficulty, description, juego.id_game) {
+                    showCreateAchievementDialog = false
+                }
+            }
+        )
+    }
+
+    if (showCreateWikiDialog) {
+        CrearWikiDialog(
+            loading = actionLoading,
+            error = actionError,
+            onDismiss = {
+                viewModel.clearActionError()
+                showCreateWikiDialog = false
+            },
+            onCreate = { name, category, description ->
+                viewModel.crearWiki(name, category, description) {
+                    showCreateWikiDialog = false
+                }
+            }
+        )
+    }
+
+    if (showCreateBuildDialog) {
+        CrearBuildDialog(
+            defaultPlanner = plannerName,
+            loading = actionLoading,
+            error = actionError,
+            onDismiss = {
+                viewModel.clearActionError()
+                showCreateBuildDialog = false
+            },
+            onCreate = { name, planner, category, description ->
+                viewModel.crearBuild(name, planner, category, description) {
+                    showCreateBuildDialog = false
+                }
+            }
+        )
     }
 
     val filteredWiki = wikiEntries.filter {
@@ -73,9 +137,9 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
                     .height(320.dp)
                     .background(MaterialTheme.colorScheme.primaryContainer)
             ) {
-                if (juego.image != null) {
+                if (gameImageUrl != null) {
                     AsyncImage(
-                        model = juego.image,
+                        model = gameImageUrl,
                         imageLoader = LocalAppImageLoader.current,
                         contentDescription = juego.name,
                         contentScale = ContentScale.Crop,
@@ -178,6 +242,15 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
                 }
             }
 
+            actionError?.let { message ->
+                Text(
+                    text = message,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                )
+            }
+
             // ── Logros ───────────────────────────────────────────────────
             Spacer(Modifier.height(8.dp))
 
@@ -185,7 +258,12 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
                 title = "Logros",
                 count = achievements.size,
                 expanded = logrosExpanded,
-                onToggle = { logrosExpanded = !logrosExpanded }
+                onToggle = { logrosExpanded = !logrosExpanded },
+                onAdd = if (isAdmin) ({
+                    viewModel.clearActionError()
+                    showCreateAchievementDialog = true
+                }) else null,
+                addEnabled = isAdmin && !actionLoading
             )
 
             AnimatedVisibility(
@@ -236,7 +314,12 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
                 title = "Wiki",
                 count = filteredWiki.size,
                 expanded = wikiExpanded,
-                onToggle = { wikiExpanded = !wikiExpanded }
+                onToggle = { wikiExpanded = !wikiExpanded },
+                onAdd = if (isAdmin) ({
+                    viewModel.clearActionError()
+                    showCreateWikiDialog = true
+                }) else null,
+                addEnabled = canCreateAdminEntries
             )
 
             AnimatedVisibility(
@@ -245,6 +328,14 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
                 exit = shrinkVertically()
             ) {
                 Column {
+                    if (isAdmin && forumId == null) {
+                        Text(
+                            text = "No hay foro asociado a este juego; el administrador no puede crear entradas de wiki todavía.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                        )
+                    }
                     // Buscador Wiki
                     OutlinedTextField(
                         value = wikiSearch,
@@ -299,7 +390,12 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
                 title = "Builds",
                 count = filteredBuilds.size,
                 expanded = buildsExpanded,
-                onToggle = { buildsExpanded = !buildsExpanded }
+                onToggle = { buildsExpanded = !buildsExpanded },
+                onAdd = if (isLoggedIn) ({
+                    viewModel.clearActionError()
+                    showCreateBuildDialog = true
+                }) else null,
+                addEnabled = canCreateBuilds && plannerName.isNotBlank()
             )
 
             AnimatedVisibility(
@@ -308,6 +404,14 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
                 exit = shrinkVertically()
             ) {
                 Column {
+                    if (isLoggedIn && forumId == null) {
+                        Text(
+                            text = "No hay foro asociado a este juego; todavía no se pueden crear builds.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                        )
+                    }
                     // Buscador Builds
                     OutlinedTextField(
                         value = buildSearch,
@@ -361,7 +465,8 @@ fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
         // ── Botón volver flotante ────────────────────────────────────────
         Box(
             modifier = Modifier
-                .padding(top = 16.dp, start = 16.dp)
+                .statusBarsPadding()
+                .padding(top = 8.dp, start = 16.dp)
                 .size(42.dp)
                 .clip(CircleShape)
                 .background(Color.Black.copy(alpha = 0.45f))
@@ -389,7 +494,9 @@ private fun CollapsibleSectionHeader(
     title: String,
     count: Int,
     expanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    onAdd: (() -> Unit)? = null,
+    addEnabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
@@ -423,15 +530,251 @@ private fun CollapsibleSectionHeader(
                 )
             }
         }
-        Text(
-            text = if (expanded) "▲" else "▼",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onAdd != null) {
+                Box(
+                    modifier = Modifier
+                        .padding(end = 10.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (addEnabled) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                        )
+                        .clickable(enabled = addEnabled, onClick = onAdd),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "+",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+            Text(
+                text = if (expanded) "▲" else "▼",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
     HorizontalDivider(
         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
         modifier = Modifier.padding(horizontal = 16.dp)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CrearLogroDialog(
+    loading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onCreate: (String, String) -> Unit,
+) {
+    val difficultyOptions = listOf("Bronce", "Plata", "Oro")
+    var difficulty by remember { mutableStateOf(difficultyOptions.first()) }
+    var difficultyExpanded by remember { mutableStateOf(false) }
+    var description by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nuevo logro", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExposedDropdownMenuBox(
+                    expanded = difficultyExpanded,
+                    onExpandedChange = { difficultyExpanded = !difficultyExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = difficulty,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Dificultad *") },
+                        singleLine = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = difficultyExpanded)
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = difficultyExpanded,
+                        onDismissRequest = { difficultyExpanded = false }
+                    ) {
+                        difficultyOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    difficulty = option
+                                    difficultyExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Descripción *") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
+                )
+                if (error != null) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !loading && difficulty.isNotBlank() && description.isNotBlank(),
+                onClick = {
+                    onCreate(difficulty.trim(), description.trim())
+                }
+            ) {
+                Text(if (loading) "Creando..." else "Crear")
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !loading, onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun CrearWikiDialog(
+    loading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onCreate: (String, String, String) -> Unit,
+) {
+    var nombre by remember { mutableStateOf("") }
+    var categoria by remember { mutableStateOf("") }
+    var descripcion by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nueva entrada de wiki", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = nombre,
+                    onValueChange = { nombre = it },
+                    label = { Text("Nombre *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = categoria,
+                    onValueChange = { categoria = it },
+                    label = { Text("Categoría *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = descripcion,
+                    onValueChange = { descripcion = it },
+                    label = { Text("Descripción *") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
+                )
+                if (error != null) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !loading && nombre.isNotBlank() && categoria.isNotBlank() && descripcion.isNotBlank(),
+                onClick = {
+                    onCreate(nombre.trim(), categoria.trim(), descripcion.trim())
+                }
+            ) {
+                Text(if (loading) "Creando..." else "Crear")
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !loading, onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun CrearBuildDialog(
+    defaultPlanner: String,
+    loading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onCreate: (String, String, String, String) -> Unit
+) {
+    var nombre by remember { mutableStateOf("") }
+    var planner by remember(defaultPlanner) { mutableStateOf(defaultPlanner) }
+    var categoria by remember { mutableStateOf("") }
+    var descripcion by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nueva build", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = planner,
+                    onValueChange = { planner = it },
+                    label = { Text("Planner *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = nombre,
+                    onValueChange = { nombre = it },
+                    label = { Text("Nombre *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = categoria,
+                    onValueChange = { categoria = it },
+                    label = { Text("Categoría *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = descripcion,
+                    onValueChange = { descripcion = it },
+                    label = { Text("Descripción *") },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp)
+                )
+                if (error != null) {
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !loading && nombre.isNotBlank() && categoria.isNotBlank() && descripcion.isNotBlank() && planner.isNotBlank(),
+                onClick = {
+                    onCreate(nombre.trim(), planner.trim(), categoria.trim(), descripcion.trim())
+                }
+            ) {
+                Text(if (loading) "Creando..." else "Crear")
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !loading, onClick = onDismiss) { Text("Cancelar") }
+        }
     )
 }
 
