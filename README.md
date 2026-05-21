@@ -1,5 +1,5 @@
 
-# PManager Frontend
+# Glyph
 
 This is the Frontend part of our final project.
 
