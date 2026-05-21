@@ -33,7 +33,7 @@ class PantallaPrincipalViewModel : ViewModel() {
 
     private val _isAdmin = MutableStateFlow(SessionManager.isAdmin())
     val isAdmin: StateFlow<Boolean> = SessionManager.roleFlow
-        .map { it == "admin" }
+        .map { SessionManager.isAdminRole(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, SessionManager.isAdmin())
 
     fun cargarDatos() {

@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         TokenStorage.init(this)
+        ImagePickerHolder.appContext = applicationContext
         ImagePickerHolder.launchPicker = { pickImage.launch("image/*") }
         setContent {
             App()
