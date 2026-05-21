@@ -1,4 +1,4 @@
-rootProject.name = "PManagerFrontEnd"
+rootProject.name = "Glyph"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

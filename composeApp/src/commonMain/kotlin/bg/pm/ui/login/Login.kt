@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import bg.pm.ui.common.RuneBrand
 
 @Composable
 fun LoginAdministrador(
@@ -45,13 +46,7 @@ fun LoginAdministrador(
                     .padding(40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "PManager",
-                    fontSize = 42.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                RuneBrand(modifier = Modifier.padding(bottom = 8.dp))
                 Text(
                     text = "Accede a tu cuenta",
                     fontSize = 15.sp,

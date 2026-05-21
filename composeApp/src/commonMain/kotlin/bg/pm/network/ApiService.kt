@@ -1,5 +1,7 @@
 package bg.pm.network
 
+import bg.pm.getApiBaseUrl
+import bg.pm.PickedImageUpload
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -29,7 +31,7 @@ object ApiService {
                 setBody(usuario)
             }.body()
         } catch (e: Exception) {
-            throw Exception("Error en el registro: ${e.message}")
+            throw Exception("Error en el registro contra $BASE_URL: ${e.message ?: "sin detalle"}")
         }
     }
 
@@ -75,6 +77,16 @@ object ApiService {
             }.body()
         } catch (e: Exception) {
             throw Exception("Error al obtener foros: ${e.message}")
+        }
+    }
+
+    suspend fun obtenerForosPorJuego(gameId: Int, token: String): List<ForumOut> {
+        return try {
+            client.get("$BASE_URL/forums/game/$gameId/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 
@@ -133,6 +145,50 @@ object ApiService {
             bearerAuth(token)
             contentType(ContentType.Application.Json)
             setBody(game)
+        }.body()
+    }
+
+    suspend fun crearWiki(wiki: WikiIn, token: String): WikiOut {
+        return client.post("$BASE_URL/wiki/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(wiki)
+        }.body()
+    }
+
+    suspend fun crearBuild(build: BuildIn, token: String): BuildOut {
+        return client.post("$BASE_URL/builds/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(build)
+        }.body()
+    }
+
+    suspend fun subirImagenJuego(gameId: Int, image: PickedImageUpload, token: String): GameOut {
+        return client.post("$BASE_URL/games/$gameId/image/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
+    suspend fun crearLogro(achievement: AchievementIn, token: String): AchievementOut {
+        return client.post("$BASE_URL/achievements/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(achievement)
         }.body()
     }
 }
