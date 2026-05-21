@@ -21,3 +21,5 @@ actual fun pickImageFile(callback: (String?) -> Unit) {
         )
     }
 }
+
+actual fun getBaseUrl(): String = "http://localhost:8000"
