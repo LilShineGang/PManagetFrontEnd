@@ -90,8 +90,8 @@ private suspend fun tryAutoLogin(): Boolean {
             val refreshToken = TokenStorage.getRefreshToken() ?: return false
             try {
                 val response = ApiService.refreshToken(refreshToken)
-                if (response.access_token != null && response.refresh_token != null) {
-                    TokenStorage.saveTokens(response.access_token, response.refresh_token, username)
+                if (response.access_token != null) {
+                    TokenStorage.saveTokens(response.access_token, response.refresh_token ?: "", username)
                     SessionManager.accessToken = response.access_token
                     SessionManager.username = username
                     val perfil = ApiService.obtenerPerfil(response.access_token)

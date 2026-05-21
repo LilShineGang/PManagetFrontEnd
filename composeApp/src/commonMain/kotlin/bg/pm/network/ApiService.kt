@@ -8,9 +8,10 @@ import io.ktor.client.request.forms.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import bg.pm.getBaseUrl
 
 object ApiService {
-    private const val BASE_URL = "http://10.160.81.1:8000"
+    private val BASE_URL = getBaseUrl()
 
     private val client = HttpClient {
         install(ContentNegotiation) {
