@@ -7,6 +7,7 @@ import bg.pm.network.ChatOut
 import bg.pm.network.ForumOut
 import bg.pm.network.GameOut
 import bg.pm.network.SessionManager
+import bg.pm.network.UserOut
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +32,9 @@ class PantallaPrincipalViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _perfil = MutableStateFlow<UserOut?>(null)
+    val perfil: StateFlow<UserOut?> = _perfil.asStateFlow()
+
     private val _isAdmin = MutableStateFlow(SessionManager.isAdmin())
     val isAdmin: StateFlow<Boolean> = SessionManager.roleFlow
         .map { SessionManager.isAdminRole(it) }
@@ -42,6 +46,7 @@ class PantallaPrincipalViewModel : ViewModel() {
         _error.value = null
         viewModelScope.launch {
             try {
+                _perfil.value = ApiService.obtenerPerfil(token)
                 _juegos.value = ApiService.obtenerJuegos(token)
                 _foros.value = ApiService.obtenerForos(token)
                 _chats.value = ApiService.obtenerChats(token)

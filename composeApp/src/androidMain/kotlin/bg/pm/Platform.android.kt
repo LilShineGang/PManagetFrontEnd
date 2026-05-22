@@ -10,7 +10,7 @@ class AndroidPlatform : Platform {
 
 actual fun getPlatform(): Platform = AndroidPlatform()
 
-actual fun getApiBaseUrl(): String = "http://10.160.81.1:8000"
+actual fun getBaseUrl(): String = "http://10.160.81.1:8000"
 
 actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? {
     val context = ImagePickerHolder.appContext ?: return null
@@ -39,5 +39,3 @@ actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? 
 actual fun pickImageFile(callback: (String?) -> Unit) {
     ImagePickerHolder.pick(callback)
 }
-
-actual fun getBaseUrl(): String = "http://192.168.1.169:8000"

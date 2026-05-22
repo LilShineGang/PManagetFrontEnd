@@ -1,6 +1,5 @@
 package bg.pm.network
 
-import bg.pm.getApiBaseUrl
 import bg.pm.PickedImageUpload
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -166,6 +165,60 @@ object ApiService {
 
     suspend fun subirImagenJuego(gameId: Int, image: PickedImageUpload, token: String): GameOut {
         return client.post("$BASE_URL/games/$gameId/image/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
+    suspend fun eliminarCuenta(username: String, token: String) {
+        client.delete("$BASE_URL/users/$username/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun actualizarPerfil(update: UserUpdate, token: String): UserOut {
+        return client.put("$BASE_URL/users/me/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(update)
+        }.body()
+    }
+
+    suspend fun subirImagenPerfil(image: PickedImageUpload, token: String): UserOut {
+        return client.post("$BASE_URL/users/me/image/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
+    suspend fun subirBannerPerfil(image: PickedImageUpload, token: String): UserOut {
+        return client.post("$BASE_URL/users/me/banner/") {
             bearerAuth(token)
             setBody(
                 MultiPartFormDataContent(

@@ -6,7 +6,7 @@ class JsPlatform: Platform {
 
 actual fun getPlatform(): Platform = JsPlatform()
 
-actual fun getApiBaseUrl(): String = "http://127.0.0.1:8000"
+actual fun getBaseUrl(): String = "http://127.0.0.1:8000"
 
 actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? = null
 
