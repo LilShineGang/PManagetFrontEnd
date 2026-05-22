@@ -54,9 +54,9 @@ class LoginViewModel : ViewModel() {
                 )
                 _isValidating.value = false
 
-                if (response.access_token != null && response.refresh_token != null) {
+                if (response.access_token != null) {
                     val uname = _usuario.value.trim()
-                    TokenStorage.saveTokens(response.access_token, response.refresh_token, uname)
+                    TokenStorage.saveTokens(response.access_token, response.refresh_token ?: "", uname)
                     SessionManager.accessToken = response.access_token
                     SessionManager.username = uname
                     // fetch role

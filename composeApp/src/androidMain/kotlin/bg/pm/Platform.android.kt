@@ -39,3 +39,5 @@ actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? 
 actual fun pickImageFile(callback: (String?) -> Unit) {
     ImagePickerHolder.pick(callback)
 }
+
+actual fun getBaseUrl(): String = "http://192.168.1.169:8000"
