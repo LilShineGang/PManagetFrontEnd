@@ -42,10 +42,13 @@ import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
 import bg.pm.ui.common.RuneBrand
 import bg.pm.ui.game.GameDetailScreen
+import androidx.compose.runtime.*
+import bg.pm.ui.theme.PManagerTheme
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
+    var seccionActual by remember { mutableStateOf<Seccion>(Seccion.Inicio) }
     var juegoSeleccionado by remember { mutableStateOf<bg.pm.network.GameOut?>(null) }
     var mostrarPerfil by remember { mutableStateOf(false) }
 
@@ -65,6 +68,7 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val isAdmin by viewModel.isAdmin.collectAsState()
+    
     var mostrarDialogoCrear by remember { mutableStateOf(false) }
     var menuPerfilExpandido by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -101,11 +105,12 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                         }
                         mostrarDialogoCrear = false
                         viewModel.cargarDatos()
-                    } catch (e: Exception) { /* ignore */ }
+                    } catch (e: Exception) { }
                 }
             }
         )
     }
+}
 
     Scaffold(
         topBar = {
@@ -166,132 +171,43 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                // ── CARRUSEL DE JUEGOS ──────────────────────────────────
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, top = 20.dp, bottom = 8.dp, end = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                Text("Juegos", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                if (isAdmin) {
+                    Box(
+                        modifier = Modifier.size(30.dp).clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { onCrearClick() },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Juegos",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        if (isAdmin) {
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                                    .clickable { mostrarDialogoCrear = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "+",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    lineHeight = 18.sp,
-                                    textAlign = TextAlign.Center,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
-                        }
+                        Text("+", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
                     }
-                }
-                item {
-                    if (juegos.isEmpty()) {
-                        EmptyHint("No hay juegos disponibles")
-                    } else {
-                        val pagerState = rememberPagerState { juegos.size }
-                        val scope = rememberCoroutineScope()
-                        Column {
-                            Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
-                                HorizontalPager(
-                                    state = pagerState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(horizontal = 48.dp)
-                                ) { page ->
-                                    GameCarouselCard(
-                                        juego = juegos[page],
-                                        onClick = { juegoSeleccionado = juegos[page] }
-                                    )
-                                }
-                                // ← botón izquierdo
-                                if (pagerState.currentPage > 0) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.CenterStart)
-                                            .padding(start = 6.dp)
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-                                            .clickable { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("‹", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                    }
-                                }
-                                // → botón derecho
-                                if (pagerState.currentPage < juegos.size - 1) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.CenterEnd)
-                                            .padding(end = 6.dp)
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
-                                            .clickable { scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text("›", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                repeat(juegos.size) { idx ->
-                                    val selected = pagerState.currentPage == idx
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(horizontal = 3.dp)
-                                            .size(if (selected) 9.dp else 6.dp)
-                                            .background(
-                                                if (selected) MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.outlineVariant,
-                                                CircleShape
-                                            )
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                }
-
-                // ── FOROS ───────────────────────────────────────────────
-                item { SectionHeader("Foros") }
-                if (foros.isEmpty()) {
-                    item { EmptyHint("No hay foros disponibles") }
-                } else {
-                    items(foros) { foro -> ForoCard(foro) }
-                }
-
-                // ── CHATS ───────────────────────────────────────────────
-                item { SectionHeader("Chats") }
-                if (chats.isEmpty()) {
-                    item { EmptyHint("No hay chats disponibles") }
-                } else {
-                    items(chats) { chat -> ChatCard(chat) }
                 }
             }
         }
+        item {
+            if (juegos.isEmpty()) {
+                EmptyHint("No hay juegos disponibles")
+            } else {
+                val pagerState = rememberPagerState { juegos.size }
+                HorizontalPager(state = pagerState, contentPadding = PaddingValues(horizontal = 48.dp)) { page ->
+                    GameCarouselCard(juego = juegos[page], onClick = { onJuegoClick(juegos[page]) })
+                }
+            }
+        }
+        item { SectionHeader("Foros") }
+        if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
+        else { items(foros) { ForoCard(it) } }
+
+        item { SectionHeader("Chats") }
+        if (chats.isEmpty()) { item { EmptyHint("No hay chats disponibles") } }
+        else { items(chats) { ChatCard(it) } }
+    }
+}
+
+@Composable
+fun PlaceholderPantalla(texto: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(texto, style = MaterialTheme.typography.titleLarge)
     }
 }
 
