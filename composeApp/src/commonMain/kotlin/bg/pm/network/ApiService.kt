@@ -15,6 +15,7 @@ object ApiService {
     private val BASE_URL = getBaseUrl()
 
     private val client = HttpClient {
+        expectSuccess = true
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -55,6 +56,30 @@ object ApiService {
             }.body()
         } catch (e: Exception) {
             throw Exception("Error al obtener juegos: ${e.message}")
+        }
+    }
+
+    suspend fun obtenerFavoritos(token: String): List<GameOut> {
+        return client.get("$BASE_URL/games/favorites/") {
+            bearerAuth(token)
+        }.body()
+    }
+
+    suspend fun darLike(gameId: Int, token: String) {
+        client.post("$BASE_URL/games/$gameId/favorite/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun quitarLike(gameId: Int, token: String) {
+        client.delete("$BASE_URL/games/$gameId/favorite/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun eliminarJuego(gameId: Int, token: String) {
+        client.delete("$BASE_URL/games/$gameId/") {
+            bearerAuth(token)
         }
     }
 
