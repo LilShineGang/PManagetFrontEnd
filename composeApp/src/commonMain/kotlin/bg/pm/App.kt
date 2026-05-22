@@ -34,54 +34,6 @@ fun App() {
                 loginViewModel = loginViewModel,
                 registerViewModel = registerViewModel,
             )
-            Pantalla.PRINCIPAL -> PantallaPrincipal(
-                onCerrarSesion = {
-                    TokenStorage.clear()
-                    SessionManager.clear()
-                    loginViewModel.clear()
-                    pantalla = Pantalla.LOGIN
-                }
-            )
-        }
-    }
-    } // CompositionLocalProvider
-}
-
-private suspend fun tryAutoLogin(): Boolean {
-    val accessToken = TokenStorage.getAccessToken() ?: return false
-    val username = TokenStorage.getUsername() ?: return false
-
-    return when {
-        TokenStorage.isAccessTokenValid() -> {
-            SessionManager.accessToken = accessToken
-            SessionManager.username = username
-            val perfil = ApiService.obtenerPerfil(accessToken)
-            SessionManager.role = perfil?.role
-            true
-        }
-        TokenStorage.isRefreshTokenValid() -> {
-            val refreshToken = TokenStorage.getRefreshToken() ?: return false
-            try {
-                val response = ApiService.refreshToken(refreshToken)
-                if (response.access_token != null) {
-                    TokenStorage.saveTokens(response.access_token, response.refresh_token ?: "", username)
-                    SessionManager.accessToken = response.access_token
-                    SessionManager.username = username
-                    val perfil = ApiService.obtenerPerfil(response.access_token)
-                    SessionManager.role = perfil?.role
-                    true
-                } else {
-                    TokenStorage.clear()
-                    false
-                }
-            } catch (e: Exception) {
-                TokenStorage.clear()
-                false
-            }
-        }
-        else -> {
-            TokenStorage.clear()
-            false
         }
     }
 }

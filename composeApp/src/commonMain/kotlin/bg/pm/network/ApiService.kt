@@ -1,6 +1,5 @@
 package bg.pm.network
 
-import bg.pm.getApiBaseUrl
 import bg.pm.PickedImageUpload
 import io.ktor.client.*
 import io.ktor.client.call.*

@@ -8,7 +8,7 @@ class JVMPlatform: Platform {
 
 actual fun getPlatform(): Platform = JVMPlatform()
 
-actual fun getApiBaseUrl(): String {
+actual fun getBaseUrl(): String {
     return System.getProperty("bg.pm.api.baseUrl")
         ?: System.getenv("PM_API_BASE_URL")
         ?: "http://127.0.0.1:8000"
@@ -51,5 +51,3 @@ actual fun pickImageFile(callback: (String?) -> Unit) {
         )
     }
 }
-
-actual fun getBaseUrl(): String = "http://localhost:8000"

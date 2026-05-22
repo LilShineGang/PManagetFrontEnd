@@ -42,8 +42,6 @@ import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
 import bg.pm.ui.common.RuneBrand
 import bg.pm.ui.game.GameDetailScreen
-import androidx.compose.runtime.*
-import bg.pm.ui.theme.PManagerTheme
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -110,7 +108,6 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
             }
         )
     }
-}
 
     Scaffold(
         topBar = {
@@ -171,36 +168,44 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                Text("Juegos", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                if (isAdmin) {
-                    Box(
-                        modifier = Modifier.size(30.dp).clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .clickable { onCrearClick() },
-                        contentAlignment = Alignment.Center
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("+", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                        Text("Juegos", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        if (isAdmin) {
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier.size(30.dp).clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
+                                    .clickable { mostrarDialogoCrear = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("+", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
-            }
-        }
-        item {
-            if (juegos.isEmpty()) {
-                EmptyHint("No hay juegos disponibles")
-            } else {
-                val pagerState = rememberPagerState { juegos.size }
-                HorizontalPager(state = pagerState, contentPadding = PaddingValues(horizontal = 48.dp)) { page ->
-                    GameCarouselCard(juego = juegos[page], onClick = { onJuegoClick(juegos[page]) })
+                item {
+                    if (juegos.isEmpty()) {
+                        EmptyHint("No hay juegos disponibles")
+                    } else {
+                        val pagerState = rememberPagerState { juegos.size }
+                        HorizontalPager(state = pagerState, contentPadding = PaddingValues(horizontal = 48.dp)) { page ->
+                            GameCarouselCard(juego = juegos[page], onClick = { juegoSeleccionado = juegos[page] })
+                        }
+                    }
                 }
+                item { SectionHeader("Foros") }
+                if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
+                else { items(foros) { ForoCard(it) } }
+
+                item { SectionHeader("Chats") }
+                if (chats.isEmpty()) { item { EmptyHint("No hay chats disponibles") } }
+                else { items(chats) { ChatCard(it) } }
             }
         }
-        item { SectionHeader("Foros") }
-        if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
-        else { items(foros) { ForoCard(it) } }
-
-        item { SectionHeader("Chats") }
-        if (chats.isEmpty()) { item { EmptyHint("No hay chats disponibles") } }
-        else { items(chats) { ChatCard(it) } }
     }
 }
 
