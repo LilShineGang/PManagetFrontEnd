@@ -68,6 +68,7 @@ data class UserOut(
     val username: String,
     val email: String,
     val image: String? = null,
+    val banner: String? = null,
     val role: String
 )
 
@@ -128,6 +129,13 @@ data class BuildOut(
     val category: String,
     val description: String,
     val id_forum: Int? = null
+)
+
+@Serializable
+data class UserUpdate(
+    val name: String? = null,
+    val email: String? = null,
+    val banner: String? = null,
 )
 
 @Serializable

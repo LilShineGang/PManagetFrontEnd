@@ -183,6 +183,60 @@ object ApiService {
         }.body()
     }
 
+    suspend fun eliminarCuenta(username: String, token: String) {
+        client.delete("$BASE_URL/users/$username/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun actualizarPerfil(update: UserUpdate, token: String): UserOut {
+        return client.put("$BASE_URL/users/me/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(update)
+        }.body()
+    }
+
+    suspend fun subirImagenPerfil(image: PickedImageUpload, token: String): UserOut {
+        return client.post("$BASE_URL/users/me/image/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
+    suspend fun subirBannerPerfil(image: PickedImageUpload, token: String): UserOut {
+        return client.post("$BASE_URL/users/me/banner/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
     suspend fun crearLogro(achievement: AchievementIn, token: String): AchievementOut {
         return client.post("$BASE_URL/achievements/") {
             bearerAuth(token)
