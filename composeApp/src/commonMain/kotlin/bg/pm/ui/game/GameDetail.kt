@@ -38,6 +38,7 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
     val wikiEntries by viewModel.wikiEntries.collectAsState()
     val buildEntries by viewModel.buildEntries.collectAsState()
     val achievements by viewModel.achievements.collectAsState()
+    val myAchievementIds by viewModel.myAchievementIds.collectAsState()
     val forumId by viewModel.forumId.collectAsState()
     val dataLoading by viewModel.dataLoading.collectAsState()
     val actionLoading by viewModel.actionLoading.collectAsState()
@@ -300,7 +301,13 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
                                 letterSpacing = 1.5.sp,
                                 modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 4.dp)
                             )
-                            entries.forEach { logro -> AchievementCard(logro) }
+                            entries.forEach { logro ->
+                                AchievementCard(
+                                    achievement = logro,
+                                    isEarned = logro.id_achievement in myAchievementIds,
+                                    onToggle = { viewModel.toggleLogro(logro.id_achievement) }
+                                )
+                            }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
@@ -836,7 +843,7 @@ private fun BuildCard(build: BuildOut) {
 }
 
 @Composable
-private fun AchievementCard(achievement: AchievementOut) {
+private fun AchievementCard(achievement: AchievementOut, isEarned: Boolean, onToggle: () -> Unit) {
     val medalColor = when (achievement.difficulty) {
         "Oro"   -> Color(0xFFFFD700)
         "Plata" -> Color(0xFFC0C0C0)
@@ -888,6 +895,18 @@ private fun AchievementCard(achievement: AchievementOut) {
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     lineHeight = 18.sp
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Text(
+                    text = if (isEarned) "✓" else "○",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isEarned) medalColor else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
