@@ -27,6 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -41,6 +44,7 @@ import bg.pm.network.GameOut
 import bg.pm.network.UserOut
 import bg.pm.readPickedImageUpload
 import bg.pm.resolveAppImageUrl
+import bg.pm.network.LoginRequest
 import bg.pm.network.SessionManager
 import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
@@ -438,11 +442,11 @@ private fun PerfilScreen(
                 bannerImagePath = path
                 bannerColor = color
             },
-            onSave = { name, email, imagePath, onError ->
+            onSave = { name, email, imagePath, onDone ->
                 scope.launch {
                     val token = SessionManager.accessToken
                     if (token == null) {
-                        onError("No hay sesión activa. Vuelve a iniciar sesión.")
+                        onDone("No hay sesión activa. Vuelve a iniciar sesión.")
                         return@launch
                     }
                     try {
@@ -451,7 +455,6 @@ private fun PerfilScreen(
                         if (imageUpload != null) {
                             perfilActual = ApiService.subirImagenPerfil(imageUpload, token)
                         }
-                        // Upload banner image if it's a local file path (not a server URL)
                         val localBannerPath = bannerImagePath?.takeIf { it.isNotBlank() && !it.startsWith("http") }
                         if (localBannerPath != null) {
                             val bannerUpload = readPickedImageUpload(localBannerPath)
@@ -461,7 +464,6 @@ private fun PerfilScreen(
                         }
                         val trimmedName = name.trim().takeIf { it.isNotBlank() }
                         val trimmedEmail = email.trim().takeIf { it.isNotBlank() }
-                        // Include banner color hex if a color is selected (no image upload)
                         val bannerHex = if (bannerColor != null && localBannerPath == null) bannerColor!!.toHex() else null
                         if (trimmedName != null || trimmedEmail != null || bannerHex != null) {
                             perfilActual = ApiService.actualizarPerfil(
@@ -470,9 +472,35 @@ private fun PerfilScreen(
                             )
                         }
                         perfilActual?.let { onPerfilActualizado(it) }
-                        showEdit = false
+                        onDone(null)
                     } catch (e: Exception) {
-                        onError(e.message ?: "Error desconocido al guardar")
+                        onDone(e.message ?: "Error desconocido al guardar")
+                    }
+                }
+            },
+            onEliminarCuenta = { showConfirmDelete = true },
+            onCambiarContrasena = { currentPwd, newPwd, onDone ->
+                scope.launch {
+                    val token = SessionManager.accessToken
+                    val username = SessionManager.username
+                    if (token == null || username == null) {
+                        onDone("No hay sesión activa")
+                        return@launch
+                    }
+                    try {
+                        ApiService.validarLogin(LoginRequest(username, currentPwd))
+                    } catch (e: Exception) {
+                        onDone("Contraseña actual incorrecta")
+                        return@launch
+                    }
+                    try {
+                        ApiService.actualizarPerfil(
+                            bg.pm.network.UserUpdate(password = newPwd),
+                            token
+                        )
+                        onDone(null)
+                    } catch (e: Exception) {
+                        onDone(e.message ?: "Error al cambiar la contraseña")
                     }
                 }
             }
@@ -668,17 +696,7 @@ private fun PerfilScreen(
                     Text("Cerrar sesión")
                 }
 
-                // ── Zona de peligro ──────────────────────────────────
-                Button(
-                    onClick = { showConfirmDelete = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Text("Eliminar cuenta")
-                }
+
             }
         }
     }
@@ -689,13 +707,17 @@ private fun EditPerfilDialog(
     perfil: UserOut?,
     onDismiss: () -> Unit,
     onBannerChange: (imagePath: String?, color: Color?) -> Unit,
-    onSave: (name: String, email: String, imagePath: String?, onError: (String) -> Unit) -> Unit,
+    onSave: (name: String, email: String, imagePath: String?, onDone: (String?) -> Unit) -> Unit,
+    onCambiarContrasena: (currentPwd: String, newPwd: String, onDone: (String?) -> Unit) -> Unit,
+    onEliminarCuenta: () -> Unit,
 ) {
     var name by remember { mutableStateOf(perfil?.name ?: "") }
     var email by remember { mutableStateOf(perfil?.email ?: "") }
     var imagePath by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
+    var saveSuccess by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
     val presetColors = listOf(
         Color(0xFF7B2FBE) to Color(0xFF4C1D95),
         Color(0xFF1D4ED8) to Color(0xFF0EA5E9),
@@ -705,11 +727,21 @@ private fun EditPerfilDialog(
         Color(0xFF111827) to Color(0xFF374151),
     )
 
+    if (showPasswordDialog) {
+        CambiarContrasenaDialog(
+            onDismiss = { showPasswordDialog = false },
+            onConfirm = onCambiarContrasena
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ajustes de perfil", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -753,6 +785,15 @@ private fun EditPerfilDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+                if (saveSuccess) {
+                    Text(
+                        text = "✓ Guardado correctamente",
+                        color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -780,6 +821,42 @@ private fun EditPerfilDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Imagen de fondo") }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Danger zone",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        OutlinedButton(
+                            onClick = { showPasswordDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Cambiar contraseña")
+                        }
+                        Button(
+                            onClick = onEliminarCuenta,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            )
+                        ) {
+                            Text("Eliminar cuenta")
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -788,9 +865,16 @@ private fun EditPerfilDialog(
                 onClick = {
                     saving = true
                     saveError = null
-                    onSave(name, email, imagePath) { errorMsg ->
+                    saveSuccess = false
+                    onSave(name, email, imagePath) { result ->
                         saving = false
-                        saveError = errorMsg
+                        if (result == null) {
+                            saveSuccess = true
+                            saveError = null
+                        } else {
+                            saveError = result
+                            saveSuccess = false
+                        }
                     }
                 }
             ) {
@@ -806,7 +890,112 @@ private fun EditPerfilDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(onClick = onDismiss) { Text(if (saveSuccess) "Cerrar" else "Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun CambiarContrasenaDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (currentPwd: String, newPwd: String, onDone: (String?) -> Unit) -> Unit,
+) {
+    var passwordActual by remember { mutableStateOf("") }
+    var passwordNueva by remember { mutableStateOf("") }
+    var passwordConfirm by remember { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var success by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cambiar contraseña", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = passwordActual,
+                    onValueChange = { passwordActual = it },
+                    label = { Text("Contraseña actual") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = passwordNueva,
+                    onValueChange = { passwordNueva = it },
+                    label = { Text("Nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = passwordConfirm,
+                    onValueChange = { passwordConfirm = it },
+                    label = { Text("Confirmar nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Text(
+                        text = error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (success) {
+                    Text(
+                        text = "✓ Contraseña cambiada correctamente",
+                        color = Color(0xFF2E7D32),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !saving && !success,
+                onClick = {
+                    if (passwordActual.isBlank()) {
+                        error = "Introduce tu contraseña actual"
+                        return@Button
+                    }
+                    if (passwordNueva.length < 6) {
+                        error = "La nueva contraseña debe tener al menos 6 caracteres"
+                        return@Button
+                    }
+                    if (passwordNueva != passwordConfirm) {
+                        error = "Las contraseñas nuevas no coinciden"
+                        return@Button
+                    }
+                    saving = true
+                    error = null
+                    onConfirm(passwordActual, passwordNueva) { result ->
+                        saving = false
+                        if (result == null) {
+                            success = true
+                        } else {
+                            error = result
+                        }
+                    }
+                }
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Cambiar")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(if (success) "Cerrar" else "Cancelar") }
         }
     )
 }
