@@ -136,6 +136,7 @@ data class UserUpdate(
     val name: String? = null,
     val email: String? = null,
     val banner: String? = null,
+    val password: String? = null,
 )
 
 @Serializable
