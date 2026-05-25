@@ -63,6 +63,8 @@ kotlin {
 
             // Navigation
             implementation(libs.navigation.compose)
+            // Icons
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
