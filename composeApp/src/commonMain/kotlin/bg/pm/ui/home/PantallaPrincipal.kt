@@ -6,11 +6,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -23,6 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -37,11 +44,12 @@ import bg.pm.network.GameOut
 import bg.pm.network.UserOut
 import bg.pm.readPickedImageUpload
 import bg.pm.resolveAppImageUrl
+import bg.pm.network.LoginRequest
 import bg.pm.network.SessionManager
 import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
 import bg.pm.ui.common.RuneBrand
-import bg.pm.ui.game.GameDetailScreen
+import bg.pm.ui.game.GameDetail
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -51,7 +59,7 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     var mostrarPerfil by remember { mutableStateOf(false) }
 
     if (juegoSeleccionado != null) {
-        GameDetailScreen(
+        GameDetail(
             juego = juegoSeleccionado!!,
             onVolver = { juegoSeleccionado = null }
         )
@@ -66,9 +74,12 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val isAdmin by viewModel.isAdmin.collectAsState()
+    val likedGameIds by viewModel.likedGameIds.collectAsState()
+    val juegosLiked by viewModel.juegosLiked.collectAsState()
     
     var mostrarDialogoCrear by remember { mutableStateOf(false) }
     var menuPerfilExpandido by remember { mutableStateOf(false) }
+    var juegoAEliminar by remember { mutableStateOf<GameOut?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.cargarDatos() }
@@ -77,6 +88,7 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
         PerfilScreen(
             perfil = perfil,
             onVolver = { mostrarPerfil = false },
+            onPerfilActualizado = { viewModel.actualizarPerfilLocal(it) },
             onCerrarSesion = {
                 SessionManager.clear()
                 onCerrarSesion()
@@ -89,6 +101,25 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     }
 
     // ── Diálogo crear juego ───────────────────────────────────────────
+    juegoAEliminar?.let { juego ->
+        AlertDialog(
+            onDismissRequest = { juegoAEliminar = null },
+            title = { Text("Eliminar juego") },
+            text = { Text("¿Seguro que quieres eliminar \"${juego.name}\"? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.eliminarJuego(juego.id_game)
+                        juegoAEliminar = null
+                    }
+                ) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { juegoAEliminar = null }) { Text("Cancelar") }
+            }
+        )
+    }
+
     if (mostrarDialogoCrear) {
         CrearJuegoDialog(
             onDismiss = { mostrarDialogoCrear = false },
@@ -109,101 +140,183 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    RuneBrand(compact = true)
-                },
-                actions = {
-                    Box {
-                        UserAvatar(
-                            perfil = perfil,
-                            onClick = { menuPerfilExpandido = true },
-                            modifier = Modifier.padding(end = 12.dp)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val esEscritorio = maxWidth > 600.dp
+        Row(Modifier.fillMaxSize()) {
+            if (esEscritorio) {
+                NavigationRail(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    listaSecciones.forEach { seccion ->
+                        NavigationRailItem(
+                            selected = seccionActual == seccion,
+                            onClick = { seccionActual = seccion },
+                            icon = { Icon(seccion.icon, contentDescription = seccion.title) },
+                            label = { Text(seccion.title) }
                         )
-                        DropdownMenu(
-                            expanded = menuPerfilExpandido,
-                            onDismissRequest = { menuPerfilExpandido = false },
-                            offset = DpOffset(x = (-8).dp, y = 4.dp)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Mi perfil") },
-                                onClick = {
-                                    menuPerfilExpandido = false
-                                    mostrarPerfil = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Cerrar sesión") },
-                                onClick = {
-                                    menuPerfilExpandido = false
-                                    SessionManager.clear()
-                                    onCerrarSesion()
-                                }
-                            )
-                        }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
-        if (isLoading) {
-            Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else if (error != null) {
-            Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 16.dp))
-                    Button(onClick = { viewModel.cargarDatos() }) { Text("Reintentar") }
+                    Spacer(Modifier.weight(1f))
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Juegos", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        if (isAdmin) {
-                            Spacer(Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier.size(30.dp).clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary)
-                                    .clickable { mostrarDialogoCrear = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("+", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+            Scaffold(
+                modifier = Modifier.weight(1f),
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            RuneBrand(compact = true)
+                        },
+                        actions = {
+                            Box {
+                                UserAvatar(
+                                    perfil = perfil,
+                                    onClick = { menuPerfilExpandido = true },
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                DropdownMenu(
+                                    expanded = menuPerfilExpandido,
+                                    onDismissRequest = { menuPerfilExpandido = false },
+                                    offset = DpOffset(x = (-8).dp, y = 4.dp)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Mi perfil") },
+                                        onClick = {
+                                            menuPerfilExpandido = false
+                                            mostrarPerfil = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Cerrar sesión") },
+                                        onClick = {
+                                            menuPerfilExpandido = false
+                                            SessionManager.clear()
+                                            onCerrarSesion()
+                                        }
+                                    )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                },
+                bottomBar = {
+                    if (!esEscritorio) {
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ) {
+                            listaSecciones.forEach { seccion ->
+                                NavigationBarItem(
+                                    selected = seccionActual == seccion,
+                                    onClick = { seccionActual = seccion },
+                                    icon = { Icon(seccion.icon, contentDescription = seccion.title) },
+                                    label = { Text(seccion.title) }
+                                )
                             }
                         }
                     }
-                }
-                item {
-                    if (juegos.isEmpty()) {
-                        EmptyHint("No hay juegos disponibles")
-                    } else {
-                        val pagerState = rememberPagerState { juegos.size }
-                        HorizontalPager(state = pagerState, contentPadding = PaddingValues(horizontal = 48.dp)) { page ->
-                            GameCarouselCard(juego = juegos[page], onClick = { juegoSeleccionado = juegos[page] })
+                },
+                containerColor = MaterialTheme.colorScheme.background
+            ) { paddingValues ->
+                if (isLoading) {
+                    Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else if (error != null) {
+                    Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 16.dp))
+                            Button(onClick = { viewModel.cargarDatos() }) { Text("Reintentar") }
                         }
                     }
-                }
-                item { SectionHeader("Foros") }
-                if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
-                else { items(foros) { ForoCard(it) } }
+                } else {
+                    when (seccionActual) {
+                        Seccion.Inicio -> LazyColumn(
+                            modifier = Modifier.fillMaxSize().padding(paddingValues),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            item { SectionHeader("Mis favoritos") }
+                            if (juegosLiked.isEmpty()) {
+                                item { EmptyHint("Aún no tienes favoritos. Dále al ♥ en un juego!") }
+                            } else {
+                                item {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(juegosLiked, key = { it.id_game }) { juego ->
+                                            Box(Modifier.width(260.dp).height(160.dp)) {
+                                                GameCarouselCard(
+                                                    juego = juego,
+                                                    onClick = { juegoSeleccionado = juego },
+                                                    isLiked = true,
+                                                    onToggleLike = { viewModel.toggleLike(juego) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            item { SectionHeader("Foros") }
+                            if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
+                            else { items(foros) { ForoCard(it) } }
 
-                item { SectionHeader("Chats") }
-                if (chats.isEmpty()) { item { EmptyHint("No hay chats disponibles") } }
-                else { items(chats) { ChatCard(it) } }
+                            item { SectionHeader("Chats") }
+                            if (chats.isEmpty()) { item { EmptyHint("No hay chats disponibles") } }
+                            else { items(chats) { ChatCard(it) } }
+                        }
+                        Seccion.Juegos -> LazyColumn(
+                            modifier = Modifier.fillMaxSize().padding(paddingValues),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Juegos", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    if (isAdmin) {
+                                        Spacer(Modifier.width(8.dp))
+                                        Box(
+                                            modifier = Modifier.size(30.dp).clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary)
+                                                .clickable { mostrarDialogoCrear = true },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("+", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                            if (juegos.isEmpty()) {
+                                item { EmptyHint("No hay juegos disponibles") }
+                            } else {
+                                items(juegos, key = { it.id_game }) { juego ->
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(160.dp)
+                                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                                    ) {
+                                        GameCarouselCard(
+                                            juego = juego,
+                                            onClick = { juegoSeleccionado = juego },
+                                            isLiked = juego.id_game in likedGameIds,
+                                            onToggleLike = { viewModel.toggleLike(juego) },
+                                            onDelete = if (isAdmin) { { juegoAEliminar = juego } } else null
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Seccion.Mensajes -> PlaceholderPantalla("Chats")
+                        Seccion.Comunidad -> PlaceholderPantalla("Foros")
+                        else -> PlaceholderPantalla("")
+                    }
+                }
             }
         }
     }
@@ -296,6 +409,7 @@ private fun Color.toHex(): String {
 private fun PerfilScreen(
     perfil: UserOut?,
     onVolver: () -> Unit,
+    onPerfilActualizado: (UserOut) -> Unit = {},
     onCerrarSesion: () -> Unit,
     onCuentaEliminada: () -> Unit,
 ) {
@@ -328,16 +442,19 @@ private fun PerfilScreen(
                 bannerImagePath = path
                 bannerColor = color
             },
-            onSave = { name, email, imagePath ->
+            onSave = { name, email, imagePath, onDone ->
                 scope.launch {
-                    val token = SessionManager.accessToken ?: return@launch
+                    val token = SessionManager.accessToken
+                    if (token == null) {
+                        onDone("No hay sesión activa. Vuelve a iniciar sesión.")
+                        return@launch
+                    }
                     try {
                         val imageUpload = imagePath?.takeIf { it.isNotBlank() }
                             ?.let { readPickedImageUpload(it) }
                         if (imageUpload != null) {
                             perfilActual = ApiService.subirImagenPerfil(imageUpload, token)
                         }
-                        // Upload banner image if it's a local file path (not a server URL)
                         val localBannerPath = bannerImagePath?.takeIf { it.isNotBlank() && !it.startsWith("http") }
                         if (localBannerPath != null) {
                             val bannerUpload = readPickedImageUpload(localBannerPath)
@@ -347,7 +464,6 @@ private fun PerfilScreen(
                         }
                         val trimmedName = name.trim().takeIf { it.isNotBlank() }
                         val trimmedEmail = email.trim().takeIf { it.isNotBlank() }
-                        // Include banner color hex if a color is selected (no image upload)
                         val bannerHex = if (bannerColor != null && localBannerPath == null) bannerColor!!.toHex() else null
                         if (trimmedName != null || trimmedEmail != null || bannerHex != null) {
                             perfilActual = ApiService.actualizarPerfil(
@@ -355,10 +471,36 @@ private fun PerfilScreen(
                                 token
                             )
                         }
-                        showEdit = false
+                        perfilActual?.let { onPerfilActualizado(it) }
+                        onDone(null)
                     } catch (e: Exception) {
-                        // error propagated to dialog via onSaveError
-                        showEdit = false
+                        onDone(e.message ?: "Error desconocido al guardar")
+                    }
+                }
+            },
+            onEliminarCuenta = { showConfirmDelete = true },
+            onCambiarContrasena = { currentPwd, newPwd, onDone ->
+                scope.launch {
+                    val token = SessionManager.accessToken
+                    val username = SessionManager.username
+                    if (token == null || username == null) {
+                        onDone("No hay sesión activa")
+                        return@launch
+                    }
+                    try {
+                        ApiService.validarLogin(LoginRequest(username, currentPwd))
+                    } catch (e: Exception) {
+                        onDone("Contraseña actual incorrecta")
+                        return@launch
+                    }
+                    try {
+                        ApiService.actualizarPerfil(
+                            bg.pm.network.UserUpdate(password = newPwd),
+                            token
+                        )
+                        onDone(null)
+                    } catch (e: Exception) {
+                        onDone(e.message ?: "Error al cambiar la contraseña")
                     }
                 }
             }
@@ -554,17 +696,7 @@ private fun PerfilScreen(
                     Text("Cerrar sesión")
                 }
 
-                // ── Zona de peligro ──────────────────────────────────
-                Button(
-                    onClick = { showConfirmDelete = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Text("Eliminar cuenta")
-                }
+
             }
         }
     }
@@ -575,12 +707,17 @@ private fun EditPerfilDialog(
     perfil: UserOut?,
     onDismiss: () -> Unit,
     onBannerChange: (imagePath: String?, color: Color?) -> Unit,
-    onSave: (name: String, email: String, imagePath: String?) -> Unit,
+    onSave: (name: String, email: String, imagePath: String?, onDone: (String?) -> Unit) -> Unit,
+    onCambiarContrasena: (currentPwd: String, newPwd: String, onDone: (String?) -> Unit) -> Unit,
+    onEliminarCuenta: () -> Unit,
 ) {
     var name by remember { mutableStateOf(perfil?.name ?: "") }
     var email by remember { mutableStateOf(perfil?.email ?: "") }
     var imagePath by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    var saveSuccess by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
     val presetColors = listOf(
         Color(0xFF7B2FBE) to Color(0xFF4C1D95),
         Color(0xFF1D4ED8) to Color(0xFF0EA5E9),
@@ -590,11 +727,21 @@ private fun EditPerfilDialog(
         Color(0xFF111827) to Color(0xFF374151),
     )
 
+    if (showPasswordDialog) {
+        CambiarContrasenaDialog(
+            onDismiss = { showPasswordDialog = false },
+            onConfirm = onCambiarContrasena
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ajustes de perfil", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -630,6 +777,24 @@ private fun EditPerfilDialog(
                     }
                 }
 
+                if (saveError != null) {
+                    Text(
+                        text = saveError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (saveSuccess) {
+                    Text(
+                        text = "✓ Guardado correctamente",
+                        color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                 Text(
@@ -656,6 +821,42 @@ private fun EditPerfilDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Imagen de fondo") }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Danger zone",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        OutlinedButton(
+                            onClick = { showPasswordDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Cambiar contraseña")
+                        }
+                        Button(
+                            onClick = onEliminarCuenta,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            )
+                        ) {
+                            Text("Eliminar cuenta")
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -663,7 +864,18 @@ private fun EditPerfilDialog(
                 enabled = !saving,
                 onClick = {
                     saving = true
-                    onSave(name, email, imagePath)
+                    saveError = null
+                    saveSuccess = false
+                    onSave(name, email, imagePath) { result ->
+                        saving = false
+                        if (result == null) {
+                            saveSuccess = true
+                            saveError = null
+                        } else {
+                            saveError = result
+                            saveSuccess = false
+                        }
+                    }
                 }
             ) {
                 if (saving) {
@@ -678,7 +890,112 @@ private fun EditPerfilDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(onClick = onDismiss) { Text(if (saveSuccess) "Cerrar" else "Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun CambiarContrasenaDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (currentPwd: String, newPwd: String, onDone: (String?) -> Unit) -> Unit,
+) {
+    var passwordActual by remember { mutableStateOf("") }
+    var passwordNueva by remember { mutableStateOf("") }
+    var passwordConfirm by remember { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var success by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cambiar contraseña", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = passwordActual,
+                    onValueChange = { passwordActual = it },
+                    label = { Text("Contraseña actual") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = passwordNueva,
+                    onValueChange = { passwordNueva = it },
+                    label = { Text("Nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = passwordConfirm,
+                    onValueChange = { passwordConfirm = it },
+                    label = { Text("Confirmar nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Text(
+                        text = error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (success) {
+                    Text(
+                        text = "✓ Contraseña cambiada correctamente",
+                        color = Color(0xFF2E7D32),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !saving && !success,
+                onClick = {
+                    if (passwordActual.isBlank()) {
+                        error = "Introduce tu contraseña actual"
+                        return@Button
+                    }
+                    if (passwordNueva.length < 6) {
+                        error = "La nueva contraseña debe tener al menos 6 caracteres"
+                        return@Button
+                    }
+                    if (passwordNueva != passwordConfirm) {
+                        error = "Las contraseñas nuevas no coinciden"
+                        return@Button
+                    }
+                    saving = true
+                    error = null
+                    onConfirm(passwordActual, passwordNueva) { result ->
+                        saving = false
+                        if (result == null) {
+                            success = true
+                        } else {
+                            error = result
+                        }
+                    }
+                }
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Cambiar")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(if (success) "Cerrar" else "Cancelar") }
         }
     )
 }
@@ -722,7 +1039,13 @@ private fun ProfileInfoRow(label: String, value: String) {
 }
 
 @Composable
-private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
+private fun GameCarouselCard(
+    juego: GameOut,
+    onClick: () -> Unit = {},
+    isLiked: Boolean = false,
+    onToggleLike: () -> Unit = {},
+    onDelete: (() -> Unit)? = null
+) {
     val imageUrl = resolveAppImageUrl(juego.image)
 
     Card(
@@ -761,6 +1084,44 @@ private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
                     modifier = Modifier.align(Alignment.CenterEnd).padding(20.dp)
                 )
+            }
+            IconButton(
+                onClick = onToggleLike,
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(Color.Black.copy(alpha = 0.40f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isLiked) "Quitar favorito" else "Añadir favorito",
+                        tint = if (isLiked) Color(0xFFFF4444) else Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            if (onDelete != null) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(Color.Black.copy(alpha = 0.40f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Eliminar juego",
+                            tint = Color(0xFFFF6B6B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
             }
             val textColor = if (imageUrl != null) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
             Column(modifier = Modifier.align(Alignment.BottomStart).padding(20.dp)) {

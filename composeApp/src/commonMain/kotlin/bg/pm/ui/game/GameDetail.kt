@@ -33,7 +33,7 @@ import coil3.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameDetailScreen(juego: GameOut, onVolver: () -> Unit) {
+fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
     val viewModel = remember { GameDetailViewModel() }
     val wikiEntries by viewModel.wikiEntries.collectAsState()
     val buildEntries by viewModel.buildEntries.collectAsState()

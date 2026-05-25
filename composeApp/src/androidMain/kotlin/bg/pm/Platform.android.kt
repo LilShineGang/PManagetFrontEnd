@@ -19,7 +19,7 @@ actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? 
     val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
     val contentType = resolver.getType(uri) ?: "application/octet-stream"
 
-    val fileName = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+    val rawName = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         ?.use { cursor ->
             if (cursor.moveToFirst()) {
                 cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
@@ -28,6 +28,22 @@ actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? 
             }
         }
         ?: "image"
+
+    // Ensure the filename has a backend-accepted extension
+    val allowedExts = setOf(".jpg", ".jpeg", ".png", ".webp")
+    val currentExt = rawName.substringAfterLast('.', "")
+        .let { if (it.isNotEmpty()) ".${it.lowercase()}" else "" }
+    val fileName = if (currentExt in allowedExts) {
+        rawName
+    } else {
+        val fallbackExt = when {
+            contentType.contains("jpeg") || contentType.contains("jpg") -> ".jpg"
+            contentType.contains("png") -> ".png"
+            contentType.contains("webp") -> ".webp"
+            else -> ".jpg"
+        }
+        rawName.substringBeforeLast('.') + fallbackExt
+    }
 
     return PickedImageUpload(
         fileName = fileName,
