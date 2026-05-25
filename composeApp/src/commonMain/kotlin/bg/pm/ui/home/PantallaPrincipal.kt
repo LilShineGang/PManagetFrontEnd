@@ -45,7 +45,7 @@ import bg.pm.network.SessionManager
 import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
 import bg.pm.ui.common.RuneBrand
-import bg.pm.ui.game.GameDetailScreen
+import bg.pm.ui.game.GameDetail
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -55,7 +55,7 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     var mostrarPerfil by remember { mutableStateOf(false) }
 
     if (juegoSeleccionado != null) {
-        GameDetailScreen(
+        GameDetail(
             juego = juegoSeleccionado!!,
             onVolver = { juegoSeleccionado = null }
         )
