@@ -154,6 +154,38 @@ object ApiService {
         }
     }
 
+    suspend fun obtenerMisLogros(token: String): List<AchievementOut> {
+        return try {
+            client.get("$BASE_URL/achievements/me/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun marcarLogroObtenido(achievementId: Int, token: String) {
+        client.post("$BASE_URL/achievements/me/$achievementId/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun desmarcarLogroObtenido(achievementId: Int, token: String) {
+        client.delete("$BASE_URL/achievements/me/$achievementId/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun obtenerMisBuilds(token: String): List<BuildOut> {
+        return try {
+            client.get("$BASE_URL/builds/me/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     suspend fun obtenerPerfil(token: String): UserOut? {
         return try {
             client.get("$BASE_URL/users/me/") {

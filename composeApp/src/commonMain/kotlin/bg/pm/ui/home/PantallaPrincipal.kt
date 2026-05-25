@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import bg.pm.network.ApiService
+import bg.pm.network.AchievementOut
+import bg.pm.network.BuildOut
 import bg.pm.network.ChatOut
 import bg.pm.network.ForumOut
 import bg.pm.network.GameIn
@@ -421,6 +423,17 @@ private fun PerfilScreen(
     var bannerImagePath by remember { mutableStateOf<String?>(null) }
     var bannerColor by remember { mutableStateOf<Color?>(null) }
 
+    var misLogros by remember { mutableStateOf<List<AchievementOut>>(emptyList()) }
+    var misBuilds by remember { mutableStateOf<List<BuildOut>>(emptyList()) }
+    var misFavoritos by remember { mutableStateOf<List<GameOut>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        val token = SessionManager.accessToken ?: return@LaunchedEffect
+        misLogros = ApiService.obtenerMisLogros(token)
+        misBuilds = ApiService.obtenerMisBuilds(token)
+        misFavoritos = ApiService.obtenerFavoritos(token)
+    }
+
     // Restore banner state from DB value on initial load
     LaunchedEffect(perfilActual?.banner) {
         val b = perfilActual?.banner ?: return@LaunchedEffect
@@ -555,6 +568,7 @@ private fun PerfilScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -672,6 +686,126 @@ private fun PerfilScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         RoleBadge(perfilActual?.role ?: SessionManager.role ?: "user")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── Estadísticas ──────────────────────────────────────────
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text(
+                        "Estadísticas",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatBox("Favoritos", misFavoritos.size.toString())
+                        StatBox("Builds", misBuilds.size.toString())
+                        StatBox("Logros", misLogros.size.toString())
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Logros desbloqueados ──────────────────────────────────
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text(
+                        "Logros desbloqueados",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatBox("🥉 Bronce", misLogros.count { it.difficulty == "Bronce" }.toString())
+                        StatBox("🥈 Plata", misLogros.count { it.difficulty == "Plata" }.toString())
+                        StatBox("🥇 Oro", misLogros.count { it.difficulty == "Oro" }.toString())
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Actividad (builds) ────────────────────────────────────
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text(
+                        "Actividad",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (misBuilds.isEmpty()) {
+                        Text(
+                            "Todavía no has creado ninguna build.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        misBuilds.take(5).forEach { build ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        build.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        build.category,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1034,6 +1168,27 @@ private fun ProfileInfoRow(label: String, value: String) {
             fontSize = 15.sp,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+private fun StatBox(label: String, value: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = value,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
     }
 }
