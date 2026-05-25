@@ -25,6 +25,9 @@ class GameDetailViewModel : ViewModel() {
     private val _achievements = MutableStateFlow<List<AchievementOut>>(emptyList())
     val achievements: StateFlow<List<AchievementOut>> = _achievements.asStateFlow()
 
+    private val _myAchievementIds = MutableStateFlow<Set<Int>>(emptySet())
+    val myAchievementIds: StateFlow<Set<Int>> = _myAchievementIds.asStateFlow()
+
     private val _forumId = MutableStateFlow<Int?>(null)
     val forumId: StateFlow<Int?> = _forumId.asStateFlow()
 
@@ -160,10 +163,36 @@ class GameDetailViewModel : ViewModel() {
         }
     }
 
+    fun toggleLogro(achievementId: Int) {
+        val token = SessionManager.accessToken ?: return
+        val earned = achievementId in _myAchievementIds.value
+        // Optimistic update — revert on failure
+        _myAchievementIds.value = if (earned)
+            _myAchievementIds.value - achievementId
+        else
+            _myAchievementIds.value + achievementId
+        viewModelScope.launch {
+            try {
+                if (earned) {
+                    ApiService.desmarcarLogroObtenido(achievementId, token)
+                } else {
+                    ApiService.marcarLogroObtenido(achievementId, token)
+                }
+            } catch (_: Exception) {
+                // Revert on failure
+                _myAchievementIds.value = if (earned)
+                    _myAchievementIds.value + achievementId
+                else
+                    _myAchievementIds.value - achievementId
+            }
+        }
+    }
+
     private suspend fun reloadGameData(gameId: Int, token: String) {
         _wikiEntries.value = ApiService.obtenerWikiPorJuego(gameId, token)
         _buildEntries.value = ApiService.obtenerBuildsPorJuego(gameId, token)
         _achievements.value = ApiService.obtenerLogrosPorJuego(gameId, token)
+        _myAchievementIds.value = ApiService.obtenerMisLogros(token).map { it.id_achievement }.toSet()
         _dataLoading.value = false
     }
 }
