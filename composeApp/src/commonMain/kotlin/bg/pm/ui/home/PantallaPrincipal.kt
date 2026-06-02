@@ -15,7 +15,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -52,6 +55,7 @@ import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
 import bg.pm.ui.common.RuneBrand
 import bg.pm.ui.game.GameDetail
+import bg.pm.ui.wiki.WikiScreen
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -82,6 +86,9 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     var mostrarDialogoCrear by remember { mutableStateOf(false) }
     var menuPerfilExpandido by remember { mutableStateOf(false) }
     var juegoAEliminar by remember { mutableStateOf<GameOut?>(null) }
+    var juegoBusqueda by remember { mutableStateOf("") }
+    var juegoCategoria by remember { mutableStateOf<String?>(null) }
+    var mostrarMenuFiltroJuegos by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.cargarDatos() }
@@ -235,11 +242,45 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                         }
                     }
                 } else {
+                    val juegosCategoriasDisponibles = juegos.map { it.category }.distinct().sorted()
+                    val juegosFiltrados = juegos.filter { juego ->
+                        val matchBusqueda = juegoBusqueda.isBlank() || juego.name.contains(juegoBusqueda, ignoreCase = true)
+                        val matchCategoria = juegoCategoria == null || juego.category == juegoCategoria
+                        matchBusqueda && matchCategoria
+                    }
                     when (seccionActual) {
                         Seccion.Inicio -> LazyColumn(
                             modifier = Modifier.fillMaxSize().padding(paddingValues),
                             contentPadding = PaddingValues(bottom = 24.dp)
                         ) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0f to MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                                1f to MaterialTheme.colorScheme.background
+                                            )
+                                        )
+                                        .padding(start = 20.dp, end = 20.dp, top = 32.dp, bottom = 24.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Hola, ${(perfil?.name ?: perfil?.username ?: SessionManager.username ?: "jugador").split(" ").first()}",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 28.sp,
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            lineHeight = 32.sp
+                                        )
+                                        Text(
+                                            text = "¿Qué quieres explorar hoy?",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
                             item { SectionHeader("Mis favoritos") }
                             if (juegosLiked.isEmpty()) {
                                 item { EmptyHint("Aún no tienes favoritos. Dále al ♥ en un juego!") }
@@ -274,29 +315,183 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                             modifier = Modifier.fillMaxSize().padding(paddingValues),
                             contentPadding = PaddingValues(bottom = 24.dp)
                         ) {
+                            // ── Header con degradado ──────────────────────────
                             item {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0f to MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                                1f to MaterialTheme.colorScheme.background
+                                            )
+                                        )
+                                        .padding(start = 20.dp, end = 20.dp, top = 40.dp, bottom = 20.dp)
                                 ) {
-                                    Text("Juegos", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                    if (isAdmin) {
-                                        Spacer(Modifier.width(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Box(
-                                            modifier = Modifier.size(30.dp).clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary)
-                                                .clickable { mostrarDialogoCrear = true },
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                    RoundedCornerShape(14.dp)
+                                                ),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Text("+", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                                            Icon(
+                                                imageVector = Icons.Default.VideogameAsset,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(30.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        Spacer(Modifier.width(14.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Juegos",
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 34.sp,
+                                                color = MaterialTheme.colorScheme.onBackground,
+                                                lineHeight = 38.sp
+                                            )
+                                            Text(
+                                                text = "Explora todos los juegos disponibles",
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (isAdmin) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.primary)
+                                                    .clickable { mostrarDialogoCrear = true },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    "+",
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 20.sp
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                            if (juegos.isEmpty()) {
-                                item { EmptyHint("No hay juegos disponibles") }
+                            // ── Barra búsqueda + botón filtro ────────────────
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                        .padding(bottom = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = juegoBusqueda,
+                                        onValueChange = { juegoBusqueda = it },
+                                        placeholder = { Text("Buscar juegos...") },
+                                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Box {
+                                        IconButton(
+                                            onClick = { mostrarMenuFiltroJuegos = true },
+                                            modifier = Modifier
+                                                .size(52.dp)
+                                                .background(
+                                                    if (juegoCategoria != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.FilterList,
+                                                contentDescription = "Filtrar por categoría",
+                                                tint = if (juegoCategoria != null) MaterialTheme.colorScheme.primary
+                                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = mostrarMenuFiltroJuegos,
+                                            onDismissRequest = { mostrarMenuFiltroJuegos = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        "Todas las categorías",
+                                                        fontWeight = if (juegoCategoria == null) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
+                                                onClick = { juegoCategoria = null; mostrarMenuFiltroJuegos = false }
+                                            )
+                                            HorizontalDivider()
+                                            juegosCategoriasDisponibles.forEach { cat ->
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Text(
+                                                            cat,
+                                                            fontWeight = if (juegoCategoria == cat) FontWeight.Bold else FontWeight.Normal
+                                                        )
+                                                    },
+                                                    onClick = { juegoCategoria = cat; mostrarMenuFiltroJuegos = false }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // ── Chip filtro activo ───────────────────────────
+                            if (juegoCategoria != null) {
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(horizontal = 16.dp)
+                                            .padding(bottom = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                    RoundedCornerShape(20.dp)
+                                                )
+                                                .clickable { juegoCategoria = null }
+                                                .padding(horizontal = 12.dp, vertical = 5.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = juegoCategoria!!,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                                Text(
+                                                    text = "×",
+                                                    fontSize = 15.sp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // ── Lista de juegos ──────────────────────────────
+                            if (juegosFiltrados.isEmpty()) {
+                                item {
+                                    EmptyHint(
+                                        if (juegoBusqueda.isBlank() && juegoCategoria == null) "No hay juegos disponibles"
+                                        else "No se encontraron juegos"
+                                    )
+                                }
                             } else {
-                                items(juegos, key = { it.id_game }) { juego ->
+                                items(juegosFiltrados, key = { it.id_game }) { juego ->
                                     Box(
                                         Modifier
                                             .fillMaxWidth()
@@ -313,6 +508,9 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                                     }
                                 }
                             }
+                        }
+                        Seccion.Wiki -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                            WikiScreen(juegos = juegos, isAdmin = isAdmin)
                         }
                         Seccion.Mensajes -> PlaceholderPantalla("Chats")
                         Seccion.Comunidad -> PlaceholderPantalla("Foros")
@@ -335,10 +533,10 @@ fun PlaceholderPantalla(texto: String) {
 private fun SectionHeader(title: String) {
     Text(
         text = title,
-        fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 20.sp,
         color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
+        modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 10.dp)
     )
 }
 
