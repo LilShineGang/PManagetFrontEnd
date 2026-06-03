@@ -99,6 +99,10 @@ class PantallaPrincipalViewModel : ViewModel() {
         }
     }
 
+    fun agregarForo(foro: ForumOut) {
+        _foros.value = _foros.value + foro
+    }
+
     fun eliminarJuego(gameId: Int) {
         val token = SessionManager.accessToken ?: return
         viewModelScope.launch {

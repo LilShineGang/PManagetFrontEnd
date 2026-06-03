@@ -69,7 +69,15 @@ data class UserOut(
     val email: String,
     val image: String? = null,
     val banner: String? = null,
-    val role: String
+    val role: String,
+    val honor: Int = 0
+)
+
+@Serializable
+data class ForumIn(
+    val name: String,
+    val game_name: String,
+    val forum_type: String = "community",
 )
 
 @Serializable
@@ -77,7 +85,8 @@ data class ForumOut(
     val id_forum: Int,
     val name: String,
     val id_game: Int? = null,
-    val id_user: Int? = null
+    val id_user: Int? = null,
+    val forum_type: String = "community",
 )
 
 @Serializable
@@ -145,4 +154,55 @@ data class AchievementOut(
     val difficulty: String,
     val description: String,
     val id_game: Int? = null
+)
+
+@Serializable
+data class DiscussionIn(
+    val name: String,
+    val comments: String? = null,
+    val id_forum: Int? = null,
+)
+
+@Serializable
+data class DiscussionOut(
+    val id_discussion: Int,
+    val name: String,
+    val comments: String? = null,
+    val image: String? = null,
+    val id_forum: Int? = null,
+    val id_user: Int? = null,
+    val author_username: String? = null,
+    val likes: Int = 0,
+    val dislikes: Int = 0,
+    val reply_count: Int = 0,
+    val created_at: String? = null,
+)
+
+@Serializable
+data class PostReplyIn(
+    val content: String,
+    val id_parent_reply: Int? = null,
+)
+
+@Serializable
+data class PostReplyOut(
+    val id_reply: Int,
+    val id_discussion: Int,
+    val id_user: Int,
+    val content: String,
+    val image: String? = null,
+    val author_username: String? = null,
+    val created_at: String? = null,
+    val id_parent_reply: Int? = null,
+    val parent_author: String? = null,
+)
+
+@Serializable
+data class PostVoteIn(val vote: Int)  // 1 = like, -1 = dislike
+
+@Serializable
+data class VoteResponse(
+    val my_vote: Int,
+    val likes: Int,
+    val dislikes: Int,
 )

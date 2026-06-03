@@ -54,6 +54,7 @@ import bg.pm.network.SessionManager
 import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
 import bg.pm.ui.common.RuneBrand
+import bg.pm.ui.forum.ForumScreen
 import bg.pm.ui.game.GameDetail
 import bg.pm.ui.wiki.WikiScreen
 
@@ -513,7 +514,14 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                             WikiScreen(juegos = juegos, isAdmin = isAdmin)
                         }
                         Seccion.Mensajes -> PlaceholderPantalla("Chats")
-                        Seccion.Comunidad -> PlaceholderPantalla("Foros")
+                        Seccion.Comunidad -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                            ForumScreen(
+                                forums = foros,
+                                juegos = juegos,
+                                isAdmin = isAdmin,
+                                onForoCreado = { viewModel.agregarForo(it) },
+                            )
+                        }
                         else -> PlaceholderPantalla("")
                     }
                 }
@@ -914,6 +922,39 @@ private fun PerfilScreen(
                         StatBox("Favoritos", misFavoritos.size.toString())
                         StatBox("Builds", misBuilds.size.toString())
                         StatBox("Logros", misLogros.size.toString())
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    Spacer(Modifier.height(8.dp))
+                    // Honor
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Honor en foros",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val honorValue = perfilActual?.honor ?: 0
+                        val honorColor = when {
+                            honorValue > 0  -> MaterialTheme.colorScheme.primary
+                            honorValue < 0  -> MaterialTheme.colorScheme.error
+                            else            -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(honorColor.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                if (honorValue >= 0) "⭐ $honorValue" else "⬇ $honorValue",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = honorColor
+                            )
+                        }
                     }
                 }
             }
