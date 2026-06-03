@@ -115,6 +115,7 @@ private suspend fun tryAutoLogin(): Boolean {
             SessionManager.username = username
             val perfil = ApiService.obtenerPerfil(accessToken)
             SessionManager.role = perfil?.role
+            SessionManager.userId = perfil?.id
             true
         }
         TokenStorage.isRefreshTokenValid() -> {
@@ -127,6 +128,7 @@ private suspend fun tryAutoLogin(): Boolean {
                     SessionManager.username = username
                     val perfil = ApiService.obtenerPerfil(response.access_token)
                     SessionManager.role = perfil?.role
+                    SessionManager.userId = perfil?.id
                     true
                 } else {
                     TokenStorage.clear()

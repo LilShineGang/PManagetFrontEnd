@@ -114,6 +114,18 @@ object ApiService {
         }
     }
 
+    suspend fun crearForo(forum: ForumIn, token: String): ForumOut {
+        return client.post("$BASE_URL/forums/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(forum)
+        }.body()
+    }
+
+    suspend fun eliminarForo(forumId: Int, token: String) {
+        client.delete("$BASE_URL/forums/$forumId/") { bearerAuth(token) }
+    }
+
     suspend fun obtenerChats(token: String): List<ChatOut> {
         return try {
             client.get("$BASE_URL/chats/") {
@@ -300,5 +312,100 @@ object ApiService {
             contentType(ContentType.Application.Json)
             setBody(achievement)
         }.body()
+    }
+
+    // ── Discussions ──────────────────────────────────────────────────────
+
+    suspend fun obtenerDiscusionesPorForo(forumId: Int, token: String): List<DiscussionOut> {
+        return try {
+            client.get("$BASE_URL/discussions/forum/$forumId/") { bearerAuth(token) }.body()
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun crearDiscusion(discussion: DiscussionIn, token: String): DiscussionOut {
+        return client.post("$BASE_URL/discussions/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(discussion)
+        }.body()
+    }
+
+    suspend fun subirImagenDiscusion(
+        discussionId: Int,
+        image: PickedImageUpload,
+        token: String,
+    ): DiscussionOut {
+        return client.post("$BASE_URL/discussions/$discussionId/image/") {
+            bearerAuth(token)
+            setBody(MultiPartFormDataContent(formData {
+                append("file", image.bytes, Headers.build {
+                    append(HttpHeaders.ContentType, image.contentType)
+                    append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                })
+            }))
+        }.body()
+    }
+
+    suspend fun eliminarDiscusion(discussionId: Int, token: String) {
+        client.delete("$BASE_URL/discussions/$discussionId/") { bearerAuth(token) }
+    }
+
+    // ── Votes ────────────────────────────────────────────────────────────
+
+    suspend fun votar(discussionId: Int, vote: Int, token: String): VoteResponse {
+        return client.post("$BASE_URL/discussions/$discussionId/vote/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(PostVoteIn(vote = vote))
+        }.body()
+    }
+
+    suspend fun obtenerMiVoto(discussionId: Int, token: String): VoteResponse {
+        return try {
+            client.get("$BASE_URL/discussions/$discussionId/vote/") { bearerAuth(token) }.body()
+        } catch (_: Exception) { VoteResponse(my_vote = 0, likes = 0, dislikes = 0) }
+    }
+
+    // ── Replies ──────────────────────────────────────────────────────────
+
+    suspend fun obtenerRespuestas(discussionId: Int, token: String): List<PostReplyOut> {
+        return try {
+            client.get("$BASE_URL/discussions/$discussionId/replies/") { bearerAuth(token) }.body()
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun crearRespuesta(
+        discussionId: Int,
+        reply: PostReplyIn,
+        token: String,
+    ): PostReplyOut {
+        return client.post("$BASE_URL/discussions/$discussionId/replies/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(reply)
+        }.body()
+    }
+
+    suspend fun subirImagenRespuesta(
+        discussionId: Int,
+        replyId: Int,
+        image: PickedImageUpload,
+        token: String,
+    ): PostReplyOut {
+        return client.post("$BASE_URL/discussions/$discussionId/replies/$replyId/image/") {
+            bearerAuth(token)
+            setBody(MultiPartFormDataContent(formData {
+                append("file", image.bytes, Headers.build {
+                    append(HttpHeaders.ContentType, image.contentType)
+                    append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                })
+            }))
+        }.body()
+    }
+
+    suspend fun eliminarRespuesta(discussionId: Int, replyId: Int, token: String) {
+        client.delete("$BASE_URL/discussions/$discussionId/replies/$replyId/") {
+            bearerAuth(token)
+        }
     }
 }
