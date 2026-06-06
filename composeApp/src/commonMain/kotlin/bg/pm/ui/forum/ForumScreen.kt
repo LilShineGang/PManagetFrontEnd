@@ -555,7 +555,7 @@ private fun DiscussionCard(
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "${discussion.reply_count} respuestas",
+                        "${discussion.reply_count} comentarios",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -577,6 +577,7 @@ private fun DiscussionDetailContent(
 ) {
     val replies by viewModel.replies.collectAsState()
     val myVotes by viewModel.myVotes.collectAsState()
+    val myCommentVotes by viewModel.myCommentVotes.collectAsState()
     val repliesLoading by viewModel.repliesLoading.collectAsState()
     val actionError by viewModel.actionError.collectAsState()
 
@@ -586,26 +587,33 @@ private fun DiscussionDetailContent(
     val liveMyVote = myVotes[liveDisc.id_discussion] ?: 0
 
     var mostrarResponder by remember { mutableStateOf(false) }
+    var replyingToComment by remember { mutableStateOf<PostReplyOut?>(null) }
     var isSendingReply by remember { mutableStateOf(false) }
     val imageUrl = resolveAppImageUrl(liveDisc.image)
 
     if (mostrarResponder) {
-        ResponderDialog(
+        ComentarDialog(
             isLoading = isSendingReply,
             error = if (isSendingReply) null else actionError,
+            replyingToAuthor = replyingToComment?.author_username,
             onDismiss = {
                 if (!isSendingReply) {
                     mostrarResponder = false
+                    replyingToComment = null
                     viewModel.clearError()
                 }
             },
             onSend = { content, imagePath ->
                 isSendingReply = true
                 viewModel.clearError()
-                viewModel.crearReply(liveDisc.id_discussion, content, imagePath) { ok ->
+                viewModel.crearReply(
+                    liveDisc.id_discussion, content, imagePath,
+                    parentReplyId = replyingToComment?.id_reply
+                ) { ok ->
                     isSendingReply = false
                     if (ok) {
                         mostrarResponder = false
+                        replyingToComment = null
                         viewModel.clearError()
                     }
                 }
@@ -625,9 +633,9 @@ private fun DiscussionDetailContent(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { mostrarResponder = true },
+                onClick = { replyingToComment = null; mostrarResponder = true },
                 containerColor = MaterialTheme.colorScheme.primary
-            ) { Icon(Icons.Default.Add, "Responder") }
+            ) { Icon(Icons.Default.Add, "Comentar") }
         }
     ) { padding ->
         LazyColumn(
@@ -706,10 +714,10 @@ private fun DiscussionDetailContent(
                 }
             }
 
-            // ── Replies header ────────────────────────────────────────
+            // ── Comments header ───────────────────────────────────────
             item {
                 Text(
-                    "${liveDisc.reply_count} respuestas",
+                    "${liveDisc.reply_count} comentarios",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 16.sp,
                     modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp)
@@ -724,16 +732,22 @@ private fun DiscussionDetailContent(
                 }
                 replies.isEmpty() -> item {
                     Text(
-                        "Sé el primero en responder.",
+                        "Sé el primero en comentar.",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 20.dp, bottom = 12.dp)
                     )
                 }
                 else -> items(replies, key = { it.id_reply }) { reply ->
-                    ReplyCard(
+                    CommentCard(
                         reply = reply,
+                        myVote = myCommentVotes[reply.id_reply] ?: 0,
                         canDelete = isAdmin || reply.id_user == SessionManager.userId,
+                        onVote = { vote -> viewModel.votarComentario(reply, vote) },
+                        onReply = {
+                            replyingToComment = reply
+                            mostrarResponder = true
+                        },
                         onDelete = { viewModel.eliminarReply(liveDisc.id_discussion, reply.id_reply) }
                     )
                 }
@@ -820,18 +834,49 @@ private fun AuthorChip(username: String?) {
 }
 
 @Composable
-private fun ReplyCard(
+private fun CommentCard(
     reply: PostReplyOut,
+    myVote: Int,
     canDelete: Boolean,
+    onVote: (Int) -> Unit,
+    onReply: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val imageUrl = resolveAppImageUrl(reply.image)
+    val isNested = reply.id_parent_reply != null
+    val startPadding = if (isNested) 40.dp else 16.dp
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(start = startPadding, end = 16.dp, top = 6.dp, bottom = 2.dp)
     ) {
+        // Threading indicator for nested comments
+        if (isNested && reply.parent_author != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(14.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                            RoundedCornerShape(1.dp)
+                        )
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "↩ ${reply.parent_author}",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        // Author row
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             AuthorChip(reply.author_username)
             if (reply.created_at != null) {
@@ -848,7 +893,10 @@ private fun ReplyCard(
                 }
             }
         }
+
         Spacer(Modifier.height(6.dp))
+
+        // Content bubble
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -875,8 +923,36 @@ private fun ReplyCard(
                 )
             }
         }
+
+        // Votes + reply button
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            VoteButton(
+                icon = Icons.Default.ThumbUp,
+                count = reply.likes,
+                active = myVote == 1,
+                activeColor = MaterialTheme.colorScheme.primary,
+                onClick = { onVote(1) }
+            )
+            Spacer(Modifier.width(8.dp))
+            VoteButton(
+                icon = Icons.Default.ThumbDown,
+                count = reply.dislikes,
+                active = myVote == -1,
+                activeColor = MaterialTheme.colorScheme.error,
+                onClick = { onVote(-1) }
+            )
+            Spacer(Modifier.weight(1f))
+            TextButton(
+                onClick = onReply,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text("Responder", fontSize = 12.sp)
+            }
+        }
+
         HorizontalDivider(
-            modifier = Modifier.padding(top = 10.dp),
+            modifier = Modifier.padding(top = 2.dp),
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
         )
     }
@@ -1089,9 +1165,10 @@ private fun CrearForoDialog(
 }
 
 @Composable
-private fun ResponderDialog(
+private fun ComentarDialog(
     isLoading: Boolean,
     error: String?,
+    replyingToAuthor: String? = null,
     onDismiss: () -> Unit,
     onSend: (content: String, imagePath: String?) -> Unit,
 ) {
@@ -1100,13 +1177,18 @@ private fun ResponderDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Responder", fontWeight = FontWeight.Bold) },
+        title = {
+            Text(
+                if (replyingToAuthor != null) "Responder a $replyingToAuthor" else "Nuevo comentario",
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = contenido,
                     onValueChange = { contenido = it },
-                    label = { Text("Tu respuesta *") },
+                    label = { Text(if (replyingToAuthor != null) "Tu respuesta *" else "Tu comentario *") },
                     minLines = 3,
                     maxLines = 6,
                     enabled = !isLoading,

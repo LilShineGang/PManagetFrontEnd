@@ -29,6 +29,10 @@ class ForumViewModel : ViewModel() {
     private val _myVotes = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val myVotes: StateFlow<Map<Int, Int>> = _myVotes.asStateFlow()
 
+    // replyId → my vote on that comment (0 / 1 / -1)
+    private val _myCommentVotes = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val myCommentVotes: StateFlow<Map<Int, Int>> = _myCommentVotes.asStateFlow()
+
     private val _discussionsLoading = MutableStateFlow(false)
     val discussionsLoading: StateFlow<Boolean> = _discussionsLoading.asStateFlow()
 
@@ -152,9 +156,59 @@ class ForumViewModel : ViewModel() {
         _repliesLoading.value = true
         viewModelScope.launch {
             try {
-                _replies.value = ApiService.obtenerRespuestas(discussionId, token)
+                val loaded = ApiService.obtenerRespuestas(discussionId, token)
+                _replies.value = loaded
+                val votes = mutableMapOf<Int, Int>()
+                loaded.forEach { r ->
+                    try {
+                        val resp = ApiService.obtenerMiVotoComentario(discussionId, r.id_reply, token)
+                        votes[r.id_reply] = resp.my_vote
+                    } catch (_: Exception) {}
+                }
+                _myCommentVotes.value = votes
             } finally {
                 _repliesLoading.value = false
+            }
+        }
+    }
+
+    fun votarComentario(reply: PostReplyOut, vote: Int) {
+        val token = SessionManager.accessToken ?: return
+        val id = reply.id_reply
+        val discussionId = reply.id_discussion
+
+        val currentVote = _myCommentVotes.value[id] ?: 0
+        val newVote = if (currentVote == vote) 0 else vote
+        val likeDelta = countLikeDelta(currentVote, newVote)
+        val dislikeDelta = countDislikeDelta(currentVote, newVote)
+
+        _myCommentVotes.value = _myCommentVotes.value + (id to newVote)
+        _replies.value = _replies.value.map { r ->
+            if (r.id_reply == id)
+                r.copy(
+                    likes = (r.likes + likeDelta).coerceAtLeast(0),
+                    dislikes = (r.dislikes + dislikeDelta).coerceAtLeast(0)
+                )
+            else r
+        }
+
+        viewModelScope.launch {
+            try {
+                val resp = ApiService.votarComentario(discussionId, id, vote, token)
+                _myCommentVotes.value = _myCommentVotes.value + (id to resp.my_vote)
+                _replies.value = _replies.value.map { r ->
+                    if (r.id_reply == id) r.copy(likes = resp.likes, dislikes = resp.dislikes) else r
+                }
+            } catch (_: Exception) {
+                _myCommentVotes.value = _myCommentVotes.value + (id to currentVote)
+                _replies.value = _replies.value.map { r ->
+                    if (r.id_reply == id)
+                        r.copy(
+                            likes = (r.likes - likeDelta).coerceAtLeast(0),
+                            dislikes = (r.dislikes - dislikeDelta).coerceAtLeast(0)
+                        )
+                    else r
+                }
             }
         }
     }
