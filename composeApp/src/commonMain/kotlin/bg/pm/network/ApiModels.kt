@@ -195,6 +195,8 @@ data class PostReplyOut(
     val created_at: String? = null,
     val id_parent_reply: Int? = null,
     val parent_author: String? = null,
+    val likes: Int = 0,
+    val dislikes: Int = 0,
 )
 
 @Serializable

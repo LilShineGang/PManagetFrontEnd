@@ -408,4 +408,22 @@ object ApiService {
             bearerAuth(token)
         }
     }
+
+    // ── Comment votes ────────────────────────────────────────────────────────
+
+    suspend fun votarComentario(discussionId: Int, replyId: Int, vote: Int, token: String): VoteResponse {
+        return client.post("$BASE_URL/discussions/$discussionId/replies/$replyId/vote/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(PostVoteIn(vote = vote))
+        }.body()
+    }
+
+    suspend fun obtenerMiVotoComentario(discussionId: Int, replyId: Int, token: String): VoteResponse {
+        return try {
+            client.get("$BASE_URL/discussions/$discussionId/replies/$replyId/vote/") {
+                bearerAuth(token)
+            }.body()
+        } catch (_: Exception) { VoteResponse(my_vote = 0, likes = 0, dislikes = 0) }
+    }
 }
