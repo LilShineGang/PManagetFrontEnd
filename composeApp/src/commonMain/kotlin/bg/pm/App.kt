@@ -1,27 +1,17 @@
 package bg.pm
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import bg.pm.network.ApiService
-import bg.pm.network.SessionManager
-import bg.pm.network.TokenStorage
-import bg.pm.ui.home.PantallaPrincipal
-import bg.pm.ui.login.LoginAdministrador
-import bg.pm.ui.login.LoginViewModel
-import bg.pm.ui.login.RegisterUsuario
-import bg.pm.ui.login.RegisterViewModel
-import bg.pm.ui.theme.PManagerTheme
-import coil3.ImageLoader
-import coil3.network.ktor3.KtorNetworkFetcherFactory
-import coil3.compose.LocalPlatformContext
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.navigation.compose.rememberNavController
+import bg.pm.navigation.NavGraph
 import bg.pm.ui.common.LocalAppImageLoader
-
-private enum class Pantalla { CARGANDO, LOGIN, REGISTRO, PRINCIPAL }
+import bg.pm.ui.login.LoginViewModel
+import bg.pm.ui.login.RegisterViewModel
+import bg.pm.ui.theme.GlyphTheme
+import coil3.ImageLoader
+import coil3.compose.LocalPlatformContext
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 
 @Composable
 fun App() {
@@ -34,81 +24,16 @@ fun App() {
             .build()
     }
     CompositionLocalProvider(LocalAppImageLoader provides imageLoader) {
-    PManagerTheme {
-        var pantalla by remember { mutableStateOf(Pantalla.CARGANDO) }
-        val loginViewModel = remember { LoginViewModel() }
-        val registerViewModel = remember { RegisterViewModel() }
+        GlyphTheme {
+            val navController = rememberNavController()
+            val loginViewModel = remember { LoginViewModel() }
+            val registerViewModel = remember { RegisterViewModel() }
 
-        when (pantalla) {
-            Pantalla.CARGANDO -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                LaunchedEffect(Unit) {
-                    pantalla = if (tryAutoLogin()) Pantalla.PRINCIPAL else Pantalla.LOGIN
-                }
-            }
-            Pantalla.LOGIN -> LoginAdministrador(
-                viewModel = loginViewModel,
-                onLoginExitoso = { pantalla = Pantalla.PRINCIPAL },
-                onCancelar = { pantalla = Pantalla.REGISTRO }
+            NavGraph(
+                navController = navController,
+                loginViewModel = loginViewModel,
+                registerViewModel = registerViewModel,
             )
-            Pantalla.REGISTRO -> RegisterUsuario(
-                viewModel = registerViewModel,
-                onRegistroExitoso = {
-                    loginViewModel.clear()
-                    pantalla = Pantalla.LOGIN
-                },
-                onCancelar = { pantalla = Pantalla.LOGIN }
-            )
-            Pantalla.PRINCIPAL -> PantallaPrincipal(
-                onCerrarSesion = {
-                    TokenStorage.clear()
-                    SessionManager.clear()
-                    loginViewModel.clear()
-                    pantalla = Pantalla.LOGIN
-                }
-            )
-        }
-    }
-    } // CompositionLocalProvider
-}
-
-private suspend fun tryAutoLogin(): Boolean {
-    val accessToken = TokenStorage.getAccessToken() ?: return false
-    val username = TokenStorage.getUsername() ?: return false
-
-    return when {
-        TokenStorage.isAccessTokenValid() -> {
-            SessionManager.accessToken = accessToken
-            SessionManager.username = username
-            val perfil = ApiService.obtenerPerfil(accessToken)
-            SessionManager.role = perfil?.role
-            true
-        }
-        TokenStorage.isRefreshTokenValid() -> {
-            val refreshToken = TokenStorage.getRefreshToken() ?: return false
-            try {
-                val response = ApiService.refreshToken(refreshToken)
-                if (response.access_token != null) {
-                    TokenStorage.saveTokens(response.access_token, response.refresh_token ?: "", username)
-                    SessionManager.accessToken = response.access_token
-                    SessionManager.username = username
-                    val perfil = ApiService.obtenerPerfil(response.access_token)
-                    SessionManager.role = perfil?.role
-                    true
-                } else {
-                    TokenStorage.clear()
-                    false
-                }
-            } catch (e: Exception) {
-                TokenStorage.clear()
-                false
-            }
-        }
-        else -> {
-            TokenStorage.clear()
-            false
         }
     }
 }

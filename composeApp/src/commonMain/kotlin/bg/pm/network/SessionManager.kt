@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 object SessionManager {
     var accessToken: String? = null
     var username: String? = null
+    var userId: Int? = null
 
     private val _role = MutableStateFlow<String?>(null)
     val roleFlow: StateFlow<String?> = _role.asStateFlow()
@@ -16,11 +17,16 @@ object SessionManager {
         set(value) { _role.value = value }
 
     fun isLoggedIn(): Boolean = accessToken != null
-    fun isAdmin(): Boolean = role == "admin"
+    fun isAdmin(): Boolean = isAdminRole(role)
+
+    fun isAdminRole(role: String?): Boolean {
+        return role?.trim()?.lowercase() == "admin"
+    }
 
     fun clear() {
         accessToken = null
         username = null
+        userId = null
         role = null
     }
 }

@@ -1,14 +1,25 @@
 package bg.pm.ui.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideogameAsset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
@@ -19,31 +30,43 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import bg.pm.network.ApiService
-import bg.pm.network.ChatOut
+import bg.pm.network.AchievementOut
+import bg.pm.network.BuildOut
 import bg.pm.network.ForumOut
 import bg.pm.network.GameIn
 import bg.pm.network.GameOut
+import bg.pm.network.UserOut
+import bg.pm.readPickedImageUpload
+import bg.pm.resolveAppImageUrl
+import bg.pm.network.LoginRequest
 import bg.pm.network.SessionManager
 import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
-import bg.pm.ui.game.GameDetailScreen
-import androidx.compose.runtime.*
-import bg.pm.ui.theme.PManagerTheme
+import bg.pm.ui.common.RuneBrand
+import bg.pm.ui.chat.ChatScreen
+import bg.pm.ui.forum.ForumScreen
+import bg.pm.ui.game.GameDetail
+import bg.pm.ui.wiki.WikiScreen
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     var seccionActual by remember { mutableStateOf<Seccion>(Seccion.Inicio) }
     var juegoSeleccionado by remember { mutableStateOf<bg.pm.network.GameOut?>(null) }
+    var mostrarPerfil by remember { mutableStateOf(false) }
 
     if (juegoSeleccionado != null) {
-        GameDetailScreen(
+        GameDetail(
             juego = juegoSeleccionado!!,
             onVolver = { juegoSeleccionado = null }
         )
@@ -51,21 +74,83 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     }
 
     val viewModel = remember { PantallaPrincipalViewModel() }
+    val perfil by viewModel.perfil.collectAsState()
     val juegos by viewModel.juegos.collectAsState()
     val foros by viewModel.foros.collectAsState()
-    val chats by viewModel.chats.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val isAdmin by viewModel.isAdmin.collectAsState()
+    val likedGameIds by viewModel.likedGameIds.collectAsState()
+    val juegosLiked by viewModel.juegosLiked.collectAsState()
     
+    var foroDesdeInicio by remember { mutableStateOf<ForumOut?>(null) }
     var mostrarDialogoCrear by remember { mutableStateOf(false) }
+    var menuPerfilExpandido by remember { mutableStateOf(false) }
+    var juegoAEliminar by remember { mutableStateOf<GameOut?>(null) }
+    var juegoBusqueda by remember { mutableStateOf("") }
+    var juegoCategoria by remember { mutableStateOf<String?>(null) }
+    var mostrarMenuFiltroJuegos by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.cargarDatos() }
 
-    BoxWithConstraints {
-        val esEscritorio = maxWidth > 600.dp
+    if (mostrarPerfil) {
+        PerfilScreen(
+            perfil = perfil,
+            onVolver = { mostrarPerfil = false },
+            onPerfilActualizado = { viewModel.actualizarPerfilLocal(it) },
+            onCerrarSesion = {
+                SessionManager.clear()
+                onCerrarSesion()
+            },
+            onCuentaEliminada = {
+                onCerrarSesion()
+            }
+        )
+        return
+    }
 
+    juegoAEliminar?.let { juego ->
+        AlertDialog(
+            onDismissRequest = { juegoAEliminar = null },
+            title = { Text("Eliminar juego") },
+            text = { Text("¿Seguro que quieres eliminar \"${juego.name}\"? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.eliminarJuego(juego.id_game)
+                        juegoAEliminar = null
+                    }
+                ) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { juegoAEliminar = null }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    if (mostrarDialogoCrear) {
+        CrearJuegoDialog(
+            onDismiss = { mostrarDialogoCrear = false },
+            onCreate = { game, imagePath ->
+                scope.launch {
+                    try {
+                        val token = SessionManager.accessToken ?: return@launch
+                        val createdGame = ApiService.crearJuego(game.copy(image = null), token)
+                        val imageUpload = imagePath?.takeIf { it.isNotBlank() }?.let { readPickedImageUpload(it) }
+                        if (imageUpload != null) {
+                            ApiService.subirImagenJuego(createdGame.id_game, imageUpload, token)
+                        }
+                        mostrarDialogoCrear = false
+                        viewModel.cargarDatos()
+                    } catch (e: Exception) { }
+                }
+            }
+        )
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val esEscritorio = maxWidth > 600.dp
         Row(Modifier.fillMaxSize()) {
             if (esEscritorio) {
                 NavigationRail(
@@ -84,18 +169,46 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                     Spacer(Modifier.weight(1f))
                 }
             }
-
             Scaffold(
+                modifier = Modifier.weight(1f),
                 topBar = {
                     TopAppBar(
-                        title = { Text("Glyph", fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary) },
+                        title = {
+                            RuneBrand(compact = true)
+                        },
                         actions = {
-                            Text(text = SessionManager.username ?: "", modifier = Modifier.padding(end = 8.dp))
-                            TextButton(onClick = { SessionManager.clear(); onCerrarSesion() }) {
-                                Text("Salir", fontWeight = FontWeight.SemiBold)
+                            Box {
+                                UserAvatar(
+                                    perfil = perfil,
+                                    onClick = { menuPerfilExpandido = true },
+                                    modifier = Modifier.padding(end = 12.dp)
+                                )
+                                DropdownMenu(
+                                    expanded = menuPerfilExpandido,
+                                    onDismissRequest = { menuPerfilExpandido = false },
+                                    offset = DpOffset(x = (-8).dp, y = 4.dp)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Mi perfil") },
+                                        onClick = {
+                                            menuPerfilExpandido = false
+                                            mostrarPerfil = true
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Cerrar sesión") },
+                                        onClick = {
+                                            menuPerfilExpandido = false
+                                            SessionManager.clear()
+                                            onCerrarSesion()
+                                        }
+                                    )
+                                }
                             }
                         },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
                     )
                 },
                 bottomBar = {
@@ -114,101 +227,309 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                             }
                         }
                     }
-                }
+                },
+                containerColor = MaterialTheme.colorScheme.background
             ) { paddingValues ->
-                Box(Modifier.fillMaxSize().padding(paddingValues)) {
-                    if (isLoading) {
-                        CircularProgressIndicator(Modifier.align(Alignment.Center))
-                    } else if (error != null) {
-                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(error!!, color = MaterialTheme.colorScheme.error)
+                if (isLoading) {
+                    Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else if (error != null) {
+                    Box(Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 16.dp))
                             Button(onClick = { viewModel.cargarDatos() }) { Text("Reintentar") }
                         }
-                    } else {
-                        when (seccionActual) {
-                            Seccion.Inicio -> ContenidoInicio(
-                                juegos = juegos,
-                                foros = foros,
-                                chats = chats,
-                                isAdmin = isAdmin,
-                                onCrearClick = { mostrarDialogoCrear = true },
-                                onJuegoClick = { juegoSeleccionado = it }
-                            )
-                            Seccion.Mensajes -> PlaceholderPantalla("Pantalla de Chats")
-                            Seccion.Comunidad -> PlaceholderPantalla("Pantalla de Foros")
+                    }
+                } else {
+                    val juegosCategoriasDisponibles = juegos.map { it.category }.distinct().sorted()
+                    val juegosFiltrados = juegos.filter { juego ->
+                        val matchBusqueda = juegoBusqueda.isBlank() || juego.name.contains(juegoBusqueda, ignoreCase = true)
+                        val matchCategoria = juegoCategoria == null || juego.category == juegoCategoria
+                        matchBusqueda && matchCategoria
+                    }
+                    when (seccionActual) {
+                        Seccion.Inicio -> LazyColumn(
+                            modifier = Modifier.fillMaxSize().padding(paddingValues),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0f to MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                                1f to MaterialTheme.colorScheme.background
+                                            )
+                                        )
+                                        .padding(start = 20.dp, end = 20.dp, top = 32.dp, bottom = 24.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Hola, ${(perfil?.name ?: perfil?.username ?: SessionManager.username ?: "jugador").split(" ").first()}",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 28.sp,
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            lineHeight = 32.sp
+                                        )
+                                        Text(
+                                            text = "¿Qué quieres explorar hoy?",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                            item { SectionHeader("Mis favoritos") }
+                            if (juegosLiked.isEmpty()) {
+                                item { EmptyHint("Aún no tienes favoritos. Dále al ♥ en un juego!") }
+                            } else {
+                                item {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        items(juegosLiked, key = { it.id_game }) { juego ->
+                                            Box(Modifier.width(260.dp).height(160.dp)) {
+                                                GameCarouselCard(
+                                                    juego = juego,
+                                                    onClick = { juegoSeleccionado = juego },
+                                                    isLiked = true,
+                                                    onToggleLike = { viewModel.toggleLike(juego) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            item { SectionHeader("Foros") }
+                            if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
+                            else {
+                                items(foros) { foro ->
+                                    ForoCard(foro) {
+                                        foroDesdeInicio = foro
+                                        seccionActual = Seccion.Comunidad
+                                    }
+                                }
+                            }
+
+
                         }
+                        Seccion.Juegos -> LazyColumn(
+                            modifier = Modifier.fillMaxSize().padding(paddingValues),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0f to MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                                1f to MaterialTheme.colorScheme.background
+                                            )
+                                        )
+                                        .padding(start = 20.dp, end = 20.dp, top = 40.dp, bottom = 20.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                    RoundedCornerShape(14.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.VideogameAsset,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(30.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        Spacer(Modifier.width(14.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Juegos",
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 34.sp,
+                                                color = MaterialTheme.colorScheme.onBackground,
+                                                lineHeight = 38.sp
+                                            )
+                                            Text(
+                                                text = "Explora todos los juegos disponibles",
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        if (isAdmin) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clip(CircleShape)
+                                                    .background(MaterialTheme.colorScheme.primary)
+                                                    .clickable { mostrarDialogoCrear = true },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    "+",
+                                                    color = MaterialTheme.colorScheme.onPrimary,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 20.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                        .padding(bottom = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = juegoBusqueda,
+                                        onValueChange = { juegoBusqueda = it },
+                                        placeholder = { Text("Buscar juegos...") },
+                                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Box {
+                                        IconButton(
+                                            onClick = { mostrarMenuFiltroJuegos = true },
+                                            modifier = Modifier
+                                                .size(52.dp)
+                                                .background(
+                                                    if (juegoCategoria != null) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                                    RoundedCornerShape(12.dp)
+                                                )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.FilterList,
+                                                contentDescription = "Filtrar por categoría",
+                                                tint = if (juegoCategoria != null) MaterialTheme.colorScheme.primary
+                                                       else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = mostrarMenuFiltroJuegos,
+                                            onDismissRequest = { mostrarMenuFiltroJuegos = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        "Todas las categorías",
+                                                        fontWeight = if (juegoCategoria == null) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
+                                                onClick = { juegoCategoria = null; mostrarMenuFiltroJuegos = false }
+                                            )
+                                            HorizontalDivider()
+                                            juegosCategoriasDisponibles.forEach { cat ->
+                                                DropdownMenuItem(
+                                                    text = {
+                                                        Text(
+                                                            cat,
+                                                            fontWeight = if (juegoCategoria == cat) FontWeight.Bold else FontWeight.Normal
+                                                        )
+                                                    },
+                                                    onClick = { juegoCategoria = cat; mostrarMenuFiltroJuegos = false }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (juegoCategoria != null) {
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(horizontal = 16.dp)
+                                            .padding(bottom = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                    RoundedCornerShape(20.dp)
+                                                )
+                                                .clickable { juegoCategoria = null }
+                                                .padding(horizontal = 12.dp, vertical = 5.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = juegoCategoria!!,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Spacer(Modifier.width(6.dp))
+                                                Text(
+                                                    text = "×",
+                                                    fontSize = 15.sp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (juegosFiltrados.isEmpty()) {
+                                item {
+                                    EmptyHint(
+                                        if (juegoBusqueda.isBlank() && juegoCategoria == null) "No hay juegos disponibles"
+                                        else "No se encontraron juegos"
+                                    )
+                                }
+                            } else {
+                                items(juegosFiltrados, key = { it.id_game }) { juego ->
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(160.dp)
+                                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                                    ) {
+                                        GameCarouselCard(
+                                            juego = juego,
+                                            onClick = { juegoSeleccionado = juego },
+                                            isLiked = juego.id_game in likedGameIds,
+                                            onToggleLike = { viewModel.toggleLike(juego) },
+                                            onDelete = if (isAdmin) { { juegoAEliminar = juego } } else null
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Seccion.Wiki -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                            WikiScreen(juegos = juegos, isAdmin = isAdmin)
+                        }
+                        Seccion.Mensajes -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                            ChatScreen()
+                        }
+                        Seccion.Comunidad -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                            ForumScreen(
+                                forums = foros,
+                                juegos = juegos,
+                                isAdmin = isAdmin,
+                                initialForum = foroDesdeInicio.also { foroDesdeInicio = null },
+                                onForoCreado = { viewModel.agregarForo(it) },
+                            )
+                        }
+                        else -> PlaceholderPantalla("")
                     }
                 }
             }
         }
-    }
-
-    if (mostrarDialogoCrear) {
-        CrearJuegoDialog(
-            onDismiss = { mostrarDialogoCrear = false },
-            onCreate = { game ->
-                scope.launch {
-                    try {
-                        val token = SessionManager.accessToken ?: return@launch
-                        ApiService.crearJuego(game, token)
-                        mostrarDialogoCrear = false
-                        viewModel.cargarDatos()
-                    } catch (e: Exception) { }
-                }
-            }
-        )
-    }
-}
-
-@Composable
-fun ContenidoInicio(
-    juegos: List<bg.pm.network.GameOut>,
-    foros: List<bg.pm.network.ForumOut>,
-    chats: List<bg.pm.network.ChatOut>,
-    isAdmin: Boolean,
-    onCrearClick: () -> Unit,
-    onJuegoClick: (bg.pm.network.GameOut) -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Juegos", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                if (isAdmin) {
-                    Box(
-                        modifier = Modifier.size(30.dp).clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .clickable { onCrearClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("+", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-        item {
-            if (juegos.isEmpty()) {
-                EmptyHint("No hay juegos disponibles")
-            } else {
-                val pagerState = rememberPagerState { juegos.size }
-                HorizontalPager(state = pagerState, contentPadding = PaddingValues(horizontal = 48.dp)) { page ->
-                    GameCarouselCard(juego = juegos[page], onClick = { onJuegoClick(juegos[page]) })
-                }
-            }
-        }
-        item { SectionHeader("Foros") }
-        if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
-        else { items(foros) { ForoCard(it) } }
-
-        item { SectionHeader("Chats") }
-        if (chats.isEmpty()) { item { EmptyHint("No hay chats disponibles") } }
-        else { items(chats) { ChatCard(it) } }
     }
 }
 
@@ -223,10 +544,10 @@ fun PlaceholderPantalla(texto: String) {
 private fun SectionHeader(title: String) {
     Text(
         text = title,
-        fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 20.sp,
         color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp)
+        modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 10.dp)
     )
 }
 
@@ -240,7 +561,878 @@ private fun EmptyHint(text: String) {
 }
 
 @Composable
-private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
+private fun UserAvatar(
+    perfil: UserOut?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val imageUrl = resolveAppImageUrl(perfil?.image)
+
+    Box(
+        modifier = modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                imageLoader = LocalAppImageLoader.current,
+                contentDescription = perfil?.username ?: "Perfil",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Text(
+                text = (perfil?.username ?: SessionManager.username ?: "?").take(1).uppercase(),
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+private fun parseHexColor(hex: String): Color? {
+    return try {
+        val h = hex.trimStart('#')
+        if (h.length == 6) {
+            val r = h.substring(0, 2).toInt(16)
+            val g = h.substring(2, 4).toInt(16)
+            val b = h.substring(4, 6).toInt(16)
+            Color(red = r / 255f, green = g / 255f, blue = b / 255f)
+        } else null
+    } catch (_: Exception) { null }
+}
+
+private fun Color.toHex(): String {
+    val r = (red * 255 + 0.5f).toInt().coerceIn(0, 255)
+    val g = (green * 255 + 0.5f).toInt().coerceIn(0, 255)
+    val b = (blue * 255 + 0.5f).toInt().coerceIn(0, 255)
+    return "#${r.toString(16).padStart(2, '0').uppercase()}${g.toString(16).padStart(2, '0').uppercase()}${b.toString(16).padStart(2, '0').uppercase()}"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PerfilScreen(
+    perfil: UserOut?,
+    onVolver: () -> Unit,
+    onPerfilActualizado: (UserOut) -> Unit = {},
+    onCerrarSesion: () -> Unit,
+    onCuentaEliminada: () -> Unit,
+) {
+    var perfilActual by remember(perfil) { mutableStateOf(perfil) }
+    var showEdit by remember { mutableStateOf(false) }
+    var showConfirmDelete by remember { mutableStateOf(false) }
+    val imageUrl = resolveAppImageUrl(perfilActual?.image)
+    val scope = rememberCoroutineScope()
+    var bannerImagePath by remember { mutableStateOf<String?>(null) }
+    var bannerColor by remember { mutableStateOf<Color?>(null) }
+
+    var misLogros by remember { mutableStateOf<List<AchievementOut>>(emptyList()) }
+    var misBuilds by remember { mutableStateOf<List<BuildOut>>(emptyList()) }
+    var misFavoritos by remember { mutableStateOf<List<GameOut>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        val token = SessionManager.accessToken ?: return@LaunchedEffect
+        misLogros = ApiService.obtenerMisLogros(token)
+        misBuilds = ApiService.obtenerMisBuilds(token)
+        misFavoritos = ApiService.obtenerFavoritos(token)
+    }
+
+    LaunchedEffect(perfilActual?.banner) {
+        val b = perfilActual?.banner ?: return@LaunchedEffect
+        if (b.startsWith("#")) {
+            bannerColor = parseHexColor(b)
+            bannerImagePath = null
+        } else {
+            bannerImagePath = resolveAppImageUrl(b)
+            bannerColor = null
+        }
+    }
+
+    if (showEdit) {
+        EditPerfilDialog(
+            perfil = perfilActual,
+            onDismiss = { showEdit = false },
+            onBannerChange = { path, color ->
+                bannerImagePath = path
+                bannerColor = color
+            },
+            onSave = { name, email, imagePath, onDone ->
+                scope.launch {
+                    val token = SessionManager.accessToken
+                    if (token == null) {
+                        onDone("No hay sesión activa. Vuelve a iniciar sesión.")
+                        return@launch
+                    }
+                    try {
+                        val imageUpload = imagePath?.takeIf { it.isNotBlank() }
+                            ?.let { readPickedImageUpload(it) }
+                        if (imageUpload != null) {
+                            perfilActual = ApiService.subirImagenPerfil(imageUpload, token)
+                        }
+                        val localBannerPath = bannerImagePath?.takeIf { it.isNotBlank() && !it.startsWith("http") }
+                        if (localBannerPath != null) {
+                            val bannerUpload = readPickedImageUpload(localBannerPath)
+                            if (bannerUpload != null) {
+                                perfilActual = ApiService.subirBannerPerfil(bannerUpload, token)
+                            }
+                        }
+                        val trimmedName = name.trim().takeIf { it.isNotBlank() }
+                        val trimmedEmail = email.trim().takeIf { it.isNotBlank() }
+                        val bannerHex = if (bannerColor != null && localBannerPath == null) bannerColor!!.toHex() else null
+                        if (trimmedName != null || trimmedEmail != null || bannerHex != null) {
+                            perfilActual = ApiService.actualizarPerfil(
+                                bg.pm.network.UserUpdate(name = trimmedName, email = trimmedEmail, banner = bannerHex),
+                                token
+                            )
+                        }
+                        perfilActual?.let { onPerfilActualizado(it) }
+                        onDone(null)
+                    } catch (e: Exception) {
+                        onDone(e.message ?: "Error desconocido al guardar")
+                    }
+                }
+            },
+            onEliminarCuenta = { showConfirmDelete = true },
+            onCambiarContrasena = { currentPwd, newPwd, onDone ->
+                scope.launch {
+                    val token = SessionManager.accessToken
+                    val username = SessionManager.username
+                    if (token == null || username == null) {
+                        onDone("No hay sesión activa")
+                        return@launch
+                    }
+                    try {
+                        ApiService.validarLogin(LoginRequest(username, currentPwd))
+                    } catch (e: Exception) {
+                        onDone("Contraseña actual incorrecta")
+                        return@launch
+                    }
+                    try {
+                        ApiService.actualizarPerfil(
+                            bg.pm.network.UserUpdate(password = newPwd),
+                            token
+                        )
+                        onDone(null)
+                    } catch (e: Exception) {
+                        onDone(e.message ?: "Error al cambiar la contraseña")
+                    }
+                }
+            }
+        )
+    }
+
+    if (showConfirmDelete) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDelete = false },
+            title = { Text("Eliminar cuenta", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("¿Seguro que quieres eliminar tu cuenta? Esta acción es irreversible.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val token = SessionManager.accessToken ?: return@launch
+                            val username = SessionManager.username ?: return@launch
+                            try {
+                                ApiService.eliminarCuenta(username, token)
+                                SessionManager.clear()
+                                onCuentaEliminada()
+                            } catch (_: Exception) {}
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Eliminar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmDelete = false }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Mi perfil", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    TextButton(onClick = onVolver) {
+                        Text("←", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(paddingValues),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(110.dp)
+                ) {
+                    if (bannerImagePath != null) {
+                        AsyncImage(
+                            model = bannerImagePath,
+                            imageLoader = LocalAppImageLoader.current,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    if (bannerColor != null)
+                                        Brush.linearGradient(listOf(bannerColor!!, bannerColor!!.copy(alpha = 0.6f)))
+                                    else
+                                        Brush.horizontalGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primary,
+                                                MaterialTheme.colorScheme.tertiary
+                                            )
+                                        )
+                                )
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 8.dp, end = 8.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.35f))
+                            .clickable { showEdit = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Ajustes",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .align(Alignment.BottomCenter)
+                        .clip(CircleShape)
+                        .border(4.dp, MaterialTheme.colorScheme.background, CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (imageUrl != null) {
+                        AsyncImage(
+                            model = imageUrl,
+                            imageLoader = LocalAppImageLoader.current,
+                            contentDescription = perfilActual?.username ?: "Perfil",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Text(
+                            text = (perfilActual?.username ?: SessionManager.username ?: "?").take(1).uppercase(),
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 36.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    ProfileInfoRow("Nombre", perfilActual?.name ?: "-")
+                    ProfileInfoRow("Usuario", perfilActual?.username ?: SessionManager.username ?: "-")
+                    ProfileInfoRow("Email", perfilActual?.email ?: "-")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Rol",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        RoleBadge(perfilActual?.role ?: SessionManager.role ?: "user")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text(
+                        "Estadísticas",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatBox("Favoritos", misFavoritos.size.toString())
+                        StatBox("Builds", misBuilds.size.toString())
+                        StatBox("Logros", misLogros.size.toString())
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Honor en foros",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val honorValue = perfilActual?.honor ?: 0
+                        val honorColor = when {
+                            honorValue > 0  -> MaterialTheme.colorScheme.primary
+                            honorValue < 0  -> MaterialTheme.colorScheme.error
+                            else            -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(honorColor.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                if (honorValue >= 0) "⭐ $honorValue" else "⬇ $honorValue",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = honorColor
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text(
+                        "Logros desbloqueados",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        StatBox("🥉 Bronce", misLogros.count { it.difficulty == "Bronce" }.toString())
+                        StatBox("🥈 Plata", misLogros.count { it.difficulty == "Plata" }.toString())
+                        StatBox("🥇 Oro", misLogros.count { it.difficulty == "Oro" }.toString())
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Text(
+                        "Actividad",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (misBuilds.isEmpty()) {
+                        Text(
+                            "Todavía no has creado ninguna build.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        misBuilds.take(5).forEach { build ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        build.name,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        build.category,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+
+                OutlinedButton(
+                    onClick = onCerrarSesion,
+                    modifier = Modifier.fillMaxWidth(),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp, MaterialTheme.colorScheme.outline
+                    )
+                ) {
+                    Text("Cerrar sesión")
+                }
+
+
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditPerfilDialog(
+    perfil: UserOut?,
+    onDismiss: () -> Unit,
+    onBannerChange: (imagePath: String?, color: Color?) -> Unit,
+    onSave: (name: String, email: String, imagePath: String?, onDone: (String?) -> Unit) -> Unit,
+    onCambiarContrasena: (currentPwd: String, newPwd: String, onDone: (String?) -> Unit) -> Unit,
+    onEliminarCuenta: () -> Unit,
+) {
+    var name by remember { mutableStateOf(perfil?.name ?: "") }
+    var email by remember { mutableStateOf(perfil?.email ?: "") }
+    var imagePath by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    var saveSuccess by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    val presetColors = listOf(
+        Color(0xFF7B2FBE) to Color(0xFF4C1D95),
+        Color(0xFF1D4ED8) to Color(0xFF0EA5E9),
+        Color(0xFF065F46) to Color(0xFF10B981),
+        Color(0xFFB45309) to Color(0xFFF59E0B),
+        Color(0xFF9D174D) to Color(0xFFEC4899),
+        Color(0xFF111827) to Color(0xFF374151),
+    )
+
+    if (showPasswordDialog) {
+        CambiarContrasenaDialog(
+            onDismiss = { showPasswordDialog = false },
+            onConfirm = onCambiarContrasena
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ajustes de perfil", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nombre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Correo electrónico") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(onClick = {
+                        pickImageFile { path -> if (path != null) imagePath = path }
+                    }) {
+                        Text("Cambiar foto")
+                    }
+                    if (imagePath != null) {
+                        Text(
+                            text = imagePath!!.substringAfterLast('/').substringAfterLast('\\'),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                if (saveError != null) {
+                    Text(
+                        text = saveError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (saveSuccess) {
+                    Text(
+                        text = "✓ Guardado correctamente",
+                        color = androidx.compose.ui.graphics.Color(0xFF2E7D32),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Text(
+                    "Fondo del perfil",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    presetColors.forEach { (c1, c2) ->
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(c1, c2)))
+                                .clickable { onBannerChange(null, c1) }
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        pickImageFile { path ->
+                            if (path != null) onBannerChange(path, null)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Imagen de fondo") }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Danger zone",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        OutlinedButton(
+                            onClick = { showPasswordDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Cambiar contraseña")
+                        }
+                        Button(
+                            onClick = onEliminarCuenta,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError
+                            )
+                        ) {
+                            Text("Eliminar cuenta")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !saving,
+                onClick = {
+                    saving = true
+                    saveError = null
+                    saveSuccess = false
+                    onSave(name, email, imagePath) { result ->
+                        saving = false
+                        if (result == null) {
+                            saveSuccess = true
+                            saveError = null
+                        } else {
+                            saveError = result
+                            saveSuccess = false
+                        }
+                    }
+                }
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Guardar")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(if (saveSuccess) "Cerrar" else "Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun CambiarContrasenaDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (currentPwd: String, newPwd: String, onDone: (String?) -> Unit) -> Unit,
+) {
+    var passwordActual by remember { mutableStateOf("") }
+    var passwordNueva by remember { mutableStateOf("") }
+    var passwordConfirm by remember { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var success by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cambiar contraseña", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = passwordActual,
+                    onValueChange = { passwordActual = it },
+                    label = { Text("Contraseña actual") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = passwordNueva,
+                    onValueChange = { passwordNueva = it },
+                    label = { Text("Nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = passwordConfirm,
+                    onValueChange = { passwordConfirm = it },
+                    label = { Text("Confirmar nueva contraseña") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Text(
+                        text = error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (success) {
+                    Text(
+                        text = "✓ Contraseña cambiada correctamente",
+                        color = Color(0xFF2E7D32),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !saving && !success,
+                onClick = {
+                    if (passwordActual.isBlank()) {
+                        error = "Introduce tu contraseña actual"
+                        return@Button
+                    }
+                    if (passwordNueva.length < 6) {
+                        error = "La nueva contraseña debe tener al menos 6 caracteres"
+                        return@Button
+                    }
+                    if (passwordNueva != passwordConfirm) {
+                        error = "Las contraseñas nuevas no coinciden"
+                        return@Button
+                    }
+                    saving = true
+                    error = null
+                    onConfirm(passwordActual, passwordNueva) { result ->
+                        saving = false
+                        if (result == null) {
+                            success = true
+                        } else {
+                            error = result
+                        }
+                    }
+                }
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Cambiar")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(if (success) "Cerrar" else "Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun RoleBadge(role: String) {
+    val isAdmin = role.trim().lowercase() == "admin"
+    val bgColor = if (isAdmin) Color(0xFFFFD700) else Color(0xFFB0BEC5)
+    val textColor = if (isAdmin) Color(0xFF4A3000) else Color(0xFF37474F)
+    val label = if (isAdmin) "Admin" else "Usuario"
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = bgColor,
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun ProfileInfoRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+private fun StatBox(label: String, value: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = value,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun GameCarouselCard(
+    juego: GameOut,
+    onClick: () -> Unit = {},
+    isLiked: Boolean = false,
+    onToggleLike: () -> Unit = {},
+    onDelete: (() -> Unit)? = null
+) {
+    val imageUrl = resolveAppImageUrl(juego.image)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -253,23 +1445,21 @@ private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            if (juego.image != null) {
+            if (imageUrl != null) {
                 AsyncImage(
-                    model = juego.image,
+                    model = imageUrl,
                     imageLoader = LocalAppImageLoader.current,
                     contentDescription = juego.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    onError = { println("Coil error loading '${juego.image}': ${it.result.throwable}") }
+                    onError = { println("Coil error loading '$imageUrl': ${it.result.throwable}") }
                 )
-                // overlay oscuro para legibilidad del texto
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.40f))
                 )
             } else {
-                // placeholder letra grande
                 Text(
                     text = juego.name.first().uppercaseChar().toString(),
                     fontSize = 72.sp,
@@ -278,7 +1468,45 @@ private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
                     modifier = Modifier.align(Alignment.CenterEnd).padding(20.dp)
                 )
             }
-            val textColor = if (juego.image != null) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+            IconButton(
+                onClick = onToggleLike,
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(Color.Black.copy(alpha = 0.40f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isLiked) "Quitar favorito" else "Añadir favorito",
+                        tint = if (isLiked) Color(0xFFFF4444) else Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            if (onDelete != null) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(Color.Black.copy(alpha = 0.40f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Eliminar juego",
+                            tint = Color(0xFFFF6B6B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+            val textColor = if (imageUrl != null) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
             Column(modifier = Modifier.align(Alignment.BottomStart).padding(20.dp)) {
                 Text(
                     text = juego.name,
@@ -321,11 +1549,12 @@ private fun GameCarouselCard(juego: GameOut, onClick: () -> Unit = {}) {
 }
 
 @Composable
-private fun ForoCard(foro: ForumOut) {
+private fun ForoCard(foro: ForumOut, onClick: () -> Unit = {}) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp),
+            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
@@ -371,59 +1600,7 @@ private fun ForoCard(foro: ForumOut) {
 }
 
 @Composable
-private fun ChatCard(chat: ChatOut) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        MaterialTheme.colorScheme.tertiaryContainer,
-                        RoundedCornerShape(8.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "#",
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = chat.content,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2
-                )
-                chat.timestamp?.let {
-                    Text(
-                        text = it,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn) -> Unit) {
+private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn, String?) -> Unit) {
     var nombre by remember { mutableStateOf("") }
     var genero by remember { mutableStateOf("") }
     var dificultad by remember { mutableStateOf("") }
@@ -456,7 +1633,6 @@ private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn) -> Unit) 
                     label = { Text("Categoría *") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                // Selector de imagen
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         "Imagen (opcional)",
@@ -502,9 +1678,10 @@ private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn) -> Unit) 
                             gender = genero.trim(),
                             difficulty = dificultad.trim(),
                             category = categoria.trim(),
-                            image = imagen.trim().ifBlank { null },
+                            image = null,
                             rating = rating.trim().toDoubleOrNull()
-                        )
+                        ),
+                        imagen.trim().ifBlank { null }
                     )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)

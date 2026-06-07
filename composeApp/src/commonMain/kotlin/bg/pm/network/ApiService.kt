@@ -1,5 +1,6 @@
 package bg.pm.network
 
+import bg.pm.PickedImageUpload
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -14,6 +15,7 @@ object ApiService {
     private val BASE_URL = getBaseUrl()
 
     private val client = HttpClient {
+        expectSuccess = true
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -29,7 +31,7 @@ object ApiService {
                 setBody(usuario)
             }.body()
         } catch (e: Exception) {
-            throw Exception("Error en el registro: ${e.message}")
+            throw Exception("Error en el registro contra $BASE_URL: ${e.message ?: "sin detalle"}")
         }
     }
 
@@ -57,6 +59,30 @@ object ApiService {
         }
     }
 
+    suspend fun obtenerFavoritos(token: String): List<GameOut> {
+        return client.get("$BASE_URL/games/favorites/") {
+            bearerAuth(token)
+        }.body()
+    }
+
+    suspend fun darLike(gameId: Int, token: String) {
+        client.post("$BASE_URL/games/$gameId/favorite/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun quitarLike(gameId: Int, token: String) {
+        client.delete("$BASE_URL/games/$gameId/favorite/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun eliminarJuego(gameId: Int, token: String) {
+        client.delete("$BASE_URL/games/$gameId/") {
+            bearerAuth(token)
+        }
+    }
+
     suspend fun refreshToken(refreshToken: String): LoginResponse {
         return try {
             client.post("$BASE_URL/users/refresh/") {
@@ -76,6 +102,28 @@ object ApiService {
         } catch (e: Exception) {
             throw Exception("Error al obtener foros: ${e.message}")
         }
+    }
+
+    suspend fun obtenerForosPorJuego(gameId: Int, token: String): List<ForumOut> {
+        return try {
+            client.get("$BASE_URL/forums/game/$gameId/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun crearForo(forum: ForumIn, token: String): ForumOut {
+        return client.post("$BASE_URL/forums/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(forum)
+        }.body()
+    }
+
+    suspend fun eliminarForo(forumId: Int, token: String) {
+        client.delete("$BASE_URL/forums/$forumId/") { bearerAuth(token) }
     }
 
     suspend fun obtenerChats(token: String): List<ChatOut> {
@@ -118,6 +166,38 @@ object ApiService {
         }
     }
 
+    suspend fun obtenerMisLogros(token: String): List<AchievementOut> {
+        return try {
+            client.get("$BASE_URL/achievements/me/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun marcarLogroObtenido(achievementId: Int, token: String) {
+        client.post("$BASE_URL/achievements/me/$achievementId/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun desmarcarLogroObtenido(achievementId: Int, token: String) {
+        client.delete("$BASE_URL/achievements/me/$achievementId/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun obtenerMisBuilds(token: String): List<BuildOut> {
+        return try {
+            client.get("$BASE_URL/builds/me/") {
+                bearerAuth(token)
+            }.body()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     suspend fun obtenerPerfil(token: String): UserOut? {
         return try {
             client.get("$BASE_URL/users/me/") {
@@ -135,4 +215,227 @@ object ApiService {
             setBody(game)
         }.body()
     }
+
+    suspend fun crearWiki(wiki: WikiIn, token: String): WikiOut {
+        return client.post("$BASE_URL/wiki/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(wiki)
+        }.body()
+    }
+
+    suspend fun crearBuild(build: BuildIn, token: String): BuildOut {
+        return client.post("$BASE_URL/builds/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(build)
+        }.body()
+    }
+
+    suspend fun subirImagenJuego(gameId: Int, image: PickedImageUpload, token: String): GameOut {
+        return client.post("$BASE_URL/games/$gameId/image/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
+    suspend fun eliminarCuenta(username: String, token: String) {
+        client.delete("$BASE_URL/users/$username/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun actualizarPerfil(update: UserUpdate, token: String): UserOut {
+        return client.put("$BASE_URL/users/me/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(update)
+        }.body()
+    }
+
+    suspend fun subirImagenPerfil(image: PickedImageUpload, token: String): UserOut {
+        return client.post("$BASE_URL/users/me/image/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
+    suspend fun subirBannerPerfil(image: PickedImageUpload, token: String): UserOut {
+        return client.post("$BASE_URL/users/me/banner/") {
+            bearerAuth(token)
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            key = "file",
+                            value = image.bytes,
+                            headers = Headers.build {
+                                append(HttpHeaders.ContentType, image.contentType)
+                                append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                            }
+                        )
+                    }
+                )
+            )
+        }.body()
+    }
+
+    suspend fun crearLogro(achievement: AchievementIn, token: String): AchievementOut {
+        return client.post("$BASE_URL/achievements/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(achievement)
+        }.body()
+    }
+
+    suspend fun obtenerDiscusionesPorForo(forumId: Int, token: String): List<DiscussionOut> {
+        return try {
+            client.get("$BASE_URL/discussions/forum/$forumId/") { bearerAuth(token) }.body()
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun crearDiscusion(discussion: DiscussionIn, token: String): DiscussionOut {
+        return client.post("$BASE_URL/discussions/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(discussion)
+        }.body()
+    }
+
+    suspend fun subirImagenDiscusion(
+        discussionId: Int,
+        image: PickedImageUpload,
+        token: String,
+    ): DiscussionOut {
+        return client.post("$BASE_URL/discussions/$discussionId/image/") {
+            bearerAuth(token)
+            setBody(MultiPartFormDataContent(formData {
+                append("file", image.bytes, Headers.build {
+                    append(HttpHeaders.ContentType, image.contentType)
+                    append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                })
+            }))
+        }.body()
+    }
+
+    suspend fun eliminarDiscusion(discussionId: Int, token: String) {
+        client.delete("$BASE_URL/discussions/$discussionId/") { bearerAuth(token) }
+    }
+
+    suspend fun votar(discussionId: Int, vote: Int, token: String): VoteResponse {
+        return client.post("$BASE_URL/discussions/$discussionId/vote/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(PostVoteIn(vote = vote))
+        }.body()
+    }
+
+    suspend fun obtenerMiVoto(discussionId: Int, token: String): VoteResponse {
+        return try {
+            client.get("$BASE_URL/discussions/$discussionId/vote/") { bearerAuth(token) }.body()
+        } catch (_: Exception) { VoteResponse(my_vote = 0, likes = 0, dislikes = 0) }
+    }
+
+    suspend fun obtenerRespuestas(discussionId: Int, token: String): List<PostReplyOut> {
+        return try {
+            client.get("$BASE_URL/discussions/$discussionId/replies/") { bearerAuth(token) }.body()
+        } catch (_: Exception) { emptyList() }
+    }
+
+    suspend fun crearRespuesta(
+        discussionId: Int,
+        reply: PostReplyIn,
+        token: String,
+    ): PostReplyOut {
+        return client.post("$BASE_URL/discussions/$discussionId/replies/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(reply)
+        }.body()
+    }
+
+    suspend fun subirImagenRespuesta(
+        discussionId: Int,
+        replyId: Int,
+        image: PickedImageUpload,
+        token: String,
+    ): PostReplyOut {
+        return client.post("$BASE_URL/discussions/$discussionId/replies/$replyId/image/") {
+            bearerAuth(token)
+            setBody(MultiPartFormDataContent(formData {
+                append("file", image.bytes, Headers.build {
+                    append(HttpHeaders.ContentType, image.contentType)
+                    append(HttpHeaders.ContentDisposition, "filename=\"${image.fileName}\"")
+                })
+            }))
+        }.body()
+    }
+
+    suspend fun eliminarRespuesta(discussionId: Int, replyId: Int, token: String) {
+        client.delete("$BASE_URL/discussions/$discussionId/replies/$replyId/") {
+            bearerAuth(token)
+        }
+    }
+
+    suspend fun votarComentario(discussionId: Int, replyId: Int, vote: Int, token: String): VoteResponse {
+        return client.post("$BASE_URL/discussions/$discussionId/replies/$replyId/vote/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(PostVoteIn(vote = vote))
+        }.body()
+    }
+
+    suspend fun obtenerMiVotoComentario(discussionId: Int, replyId: Int, token: String): VoteResponse {
+        return try {
+            client.get("$BASE_URL/discussions/$discussionId/replies/$replyId/vote/") {
+                bearerAuth(token)
+            }.body()
+        } catch (_: Exception) { VoteResponse(my_vote = 0, likes = 0, dislikes = 0) }
+    }
+
+    suspend fun obtenerConversaciones(token: String): List<DirectConversationOut> =
+        client.get("$BASE_URL/direct-chats/") { bearerAuth(token) }.body()
+
+    suspend fun iniciarConversacion(otherUsername: String, token: String): DirectConversationOut =
+        client.post("$BASE_URL/direct-chats/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(StartConversationIn(other_username = otherUsername))
+        }.body()
+
+    suspend fun obtenerMensajes(convId: Int, token: String): List<DirectMessageOut> =
+        client.get("$BASE_URL/direct-chats/$convId/messages/") { bearerAuth(token) }.body()
+
+    suspend fun enviarMensaje(convId: Int, content: String, token: String): DirectMessageOut =
+        client.post("$BASE_URL/direct-chats/$convId/messages/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(DirectMessageIn(content = content))
+        }.body()
 }

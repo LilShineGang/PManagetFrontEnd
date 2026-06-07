@@ -33,7 +33,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun PManagerTheme(content: @Composable () -> Unit) {
+fun GlyphTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
         content = content

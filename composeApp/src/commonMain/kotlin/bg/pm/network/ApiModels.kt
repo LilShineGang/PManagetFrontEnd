@@ -68,7 +68,16 @@ data class UserOut(
     val username: String,
     val email: String,
     val image: String? = null,
-    val role: String
+    val banner: String? = null,
+    val role: String,
+    val honor: Int = 0
+)
+
+@Serializable
+data class ForumIn(
+    val name: String,
+    val game_name: String,
+    val forum_type: String = "community",
 )
 
 @Serializable
@@ -76,7 +85,32 @@ data class ForumOut(
     val id_forum: Int,
     val name: String,
     val id_game: Int? = null,
-    val id_user: Int? = null
+    val id_user: Int? = null,
+    val forum_type: String = "community",
+)
+
+@Serializable
+data class WikiIn(
+    val name: String,
+    val category: String,
+    val description: String,
+    val id_forum: Int? = null
+)
+
+@Serializable
+data class BuildIn(
+    val name: String,
+    val planner: String,
+    val category: String,
+    val description: String,
+    val id_forum: Int? = null
+)
+
+@Serializable
+data class AchievementIn(
+    val difficulty: String,
+    val description: String,
+    val id_game: Int? = null
 )
 
 @Serializable
@@ -107,9 +141,98 @@ data class BuildOut(
 )
 
 @Serializable
+data class UserUpdate(
+    val name: String? = null,
+    val email: String? = null,
+    val banner: String? = null,
+    val password: String? = null,
+)
+
+@Serializable
 data class AchievementOut(
     val id_achievement: Int,
     val difficulty: String,
     val description: String,
     val id_game: Int? = null
 )
+
+@Serializable
+data class DiscussionIn(
+    val name: String,
+    val comments: String? = null,
+    val id_forum: Int? = null,
+)
+
+@Serializable
+data class DiscussionOut(
+    val id_discussion: Int,
+    val name: String,
+    val comments: String? = null,
+    val image: String? = null,
+    val id_forum: Int? = null,
+    val id_user: Int? = null,
+    val author_username: String? = null,
+    val likes: Int = 0,
+    val dislikes: Int = 0,
+    val reply_count: Int = 0,
+    val created_at: String? = null,
+    val author_image: String? = null,
+)
+
+@Serializable
+data class PostReplyIn(
+    val content: String,
+    val id_parent_reply: Int? = null,
+)
+
+@Serializable
+data class PostReplyOut(
+    val id_reply: Int,
+    val id_discussion: Int,
+    val id_user: Int,
+    val content: String,
+    val image: String? = null,
+    val author_username: String? = null,
+    val created_at: String? = null,
+    val id_parent_reply: Int? = null,
+    val parent_author: String? = null,
+    val likes: Int = 0,
+    val dislikes: Int = 0,
+    val author_image: String? = null,
+)
+
+@Serializable
+data class PostVoteIn(val vote: Int)
+
+@Serializable
+data class VoteResponse(
+    val my_vote: Int,
+    val likes: Int,
+    val dislikes: Int,
+)
+
+@Serializable
+data class DirectConversationOut(
+    val id_conversation: Int,
+    val other_user_id: Int,
+    val other_username: String,
+    val other_user_image: String? = null,
+    val last_message: String? = null,
+    val last_timestamp: String? = null,
+)
+
+@Serializable
+data class DirectMessageOut(
+    val id_message: Int,
+    val id_conversation: Int,
+    val sender_id: Int,
+    val sender_username: String,
+    val content: String,
+    val timestamp: String? = null,
+)
+
+@Serializable
+data class DirectMessageIn(val content: String)
+
+@Serializable
+data class StartConversationIn(val other_username: String)

@@ -42,6 +42,7 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
+            implementation(compose.materialIconsExtended)
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
@@ -59,6 +60,11 @@ kotlin {
             // Image loading
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
+
+            // Navigation
+            implementation(libs.navigation.compose)
+            // Icons
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

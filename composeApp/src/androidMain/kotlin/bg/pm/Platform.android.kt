@@ -1,6 +1,8 @@
 package bg.pm
 
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 
 class AndroidPlatform : Platform {
     override val name: String = "Android ${Build.VERSION.SDK_INT}"
@@ -8,8 +10,48 @@ class AndroidPlatform : Platform {
 
 actual fun getPlatform(): Platform = AndroidPlatform()
 
+actual fun getBaseUrl(): String = "http://10.161.204.208:8000"
+
+actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? {
+    val context = ImagePickerHolder.appContext ?: return null
+    val uri = Uri.parse(imagePath)
+    val resolver = context.contentResolver
+    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+    val contentType = resolver.getType(uri) ?: "application/octet-stream"
+
+    val rawName = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+            } else {
+                null
+            }
+        }
+        ?: "image"
+
+    // Ensure the filename has a backend-accepted extension
+    val allowedExts = setOf(".jpg", ".jpeg", ".png", ".webp")
+    val currentExt = rawName.substringAfterLast('.', "")
+        .let { if (it.isNotEmpty()) ".${it.lowercase()}" else "" }
+    val fileName = if (currentExt in allowedExts) {
+        rawName
+    } else {
+        val fallbackExt = when {
+            contentType.contains("jpeg") || contentType.contains("jpg") -> ".jpg"
+            contentType.contains("png") -> ".png"
+            contentType.contains("webp") -> ".webp"
+            else -> ".jpg"
+        }
+        rawName.substringBeforeLast('.') + fallbackExt
+    }
+
+    return PickedImageUpload(
+        fileName = fileName,
+        bytes = bytes,
+        contentType = contentType,
+    )
+}
+
 actual fun pickImageFile(callback: (String?) -> Unit) {
     ImagePickerHolder.pick(callback)
 }
-
-actual fun getBaseUrl(): String = "http://192.168.1.169:8000"
