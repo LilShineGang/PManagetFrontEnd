@@ -314,8 +314,6 @@ object ApiService {
         }.body()
     }
 
-    // ── Discussions ──────────────────────────────────────────────────────
-
     suspend fun obtenerDiscusionesPorForo(forumId: Int, token: String): List<DiscussionOut> {
         return try {
             client.get("$BASE_URL/discussions/forum/$forumId/") { bearerAuth(token) }.body()
@@ -350,8 +348,6 @@ object ApiService {
         client.delete("$BASE_URL/discussions/$discussionId/") { bearerAuth(token) }
     }
 
-    // ── Votes ────────────────────────────────────────────────────────────
-
     suspend fun votar(discussionId: Int, vote: Int, token: String): VoteResponse {
         return client.post("$BASE_URL/discussions/$discussionId/vote/") {
             bearerAuth(token)
@@ -365,8 +361,6 @@ object ApiService {
             client.get("$BASE_URL/discussions/$discussionId/vote/") { bearerAuth(token) }.body()
         } catch (_: Exception) { VoteResponse(my_vote = 0, likes = 0, dislikes = 0) }
     }
-
-    // ── Replies ──────────────────────────────────────────────────────────
 
     suspend fun obtenerRespuestas(discussionId: Int, token: String): List<PostReplyOut> {
         return try {
@@ -409,8 +403,6 @@ object ApiService {
         }
     }
 
-    // ── Comment votes ────────────────────────────────────────────────────────
-
     suspend fun votarComentario(discussionId: Int, replyId: Int, vote: Int, token: String): VoteResponse {
         return client.post("$BASE_URL/discussions/$discussionId/replies/$replyId/vote/") {
             bearerAuth(token)
@@ -426,4 +418,24 @@ object ApiService {
             }.body()
         } catch (_: Exception) { VoteResponse(my_vote = 0, likes = 0, dislikes = 0) }
     }
+
+    suspend fun obtenerConversaciones(token: String): List<DirectConversationOut> =
+        client.get("$BASE_URL/direct-chats/") { bearerAuth(token) }.body()
+
+    suspend fun iniciarConversacion(otherUsername: String, token: String): DirectConversationOut =
+        client.post("$BASE_URL/direct-chats/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(StartConversationIn(other_username = otherUsername))
+        }.body()
+
+    suspend fun obtenerMensajes(convId: Int, token: String): List<DirectMessageOut> =
+        client.get("$BASE_URL/direct-chats/$convId/messages/") { bearerAuth(token) }.body()
+
+    suspend fun enviarMensaje(convId: Int, content: String, token: String): DirectMessageOut =
+        client.post("$BASE_URL/direct-chats/$convId/messages/") {
+            bearerAuth(token)
+            contentType(ContentType.Application.Json)
+            setBody(DirectMessageIn(content = content))
+        }.body()
 }

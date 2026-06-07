@@ -176,6 +176,7 @@ data class DiscussionOut(
     val dislikes: Int = 0,
     val reply_count: Int = 0,
     val created_at: String? = null,
+    val author_image: String? = null,
 )
 
 @Serializable
@@ -197,10 +198,11 @@ data class PostReplyOut(
     val parent_author: String? = null,
     val likes: Int = 0,
     val dislikes: Int = 0,
+    val author_image: String? = null,
 )
 
 @Serializable
-data class PostVoteIn(val vote: Int)  // 1 = like, -1 = dislike
+data class PostVoteIn(val vote: Int)
 
 @Serializable
 data class VoteResponse(
@@ -208,3 +210,29 @@ data class VoteResponse(
     val likes: Int,
     val dislikes: Int,
 )
+
+@Serializable
+data class DirectConversationOut(
+    val id_conversation: Int,
+    val other_user_id: Int,
+    val other_username: String,
+    val other_user_image: String? = null,
+    val last_message: String? = null,
+    val last_timestamp: String? = null,
+)
+
+@Serializable
+data class DirectMessageOut(
+    val id_message: Int,
+    val id_conversation: Int,
+    val sender_id: Int,
+    val sender_username: String,
+    val content: String,
+    val timestamp: String? = null,
+)
+
+@Serializable
+data class DirectMessageIn(val content: String)
+
+@Serializable
+data class StartConversationIn(val other_username: String)
