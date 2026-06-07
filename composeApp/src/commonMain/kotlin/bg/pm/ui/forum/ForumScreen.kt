@@ -32,13 +32,16 @@ import bg.pm.network.ForumOut
 import bg.pm.network.GameOut
 import bg.pm.network.PostReplyOut
 import bg.pm.network.SessionManager
+import androidx.compose.material.icons.automirrored.filled.Reply
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.text.font.FontStyle
 import bg.pm.pickImageFile
 import bg.pm.resolveAppImageUrl
 import bg.pm.ui.common.LocalAppImageLoader
 import coil3.compose.AsyncImage
-
-// ── Navigation state ───────────────────────────────────────────────────────
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 private sealed interface ForumNavState {
     data object ForumList : ForumNavState
@@ -46,17 +49,25 @@ private sealed interface ForumNavState {
     data class DiscussionDetail(val discussion: DiscussionOut, val forum: ForumOut) : ForumNavState
 }
 
-// ── Entry point ────────────────────────────────────────────────────────────
-
 @Composable
 fun ForumScreen(
     forums: List<ForumOut>,
     juegos: List<GameOut>,
     isAdmin: Boolean,
+    initialForum: ForumOut? = null,
     onForoCreado: ((ForumOut) -> Unit)? = null,
 ) {
-    var navState by remember { mutableStateOf<ForumNavState>(ForumNavState.ForumList) }
+    var navState by remember {
+        mutableStateOf<ForumNavState>(
+            if (initialForum != null) ForumNavState.DiscussionList(initialForum)
+            else ForumNavState.ForumList
+        )
+    }
     val viewModel = remember { ForumViewModel() }
+
+    LaunchedEffect(initialForum) {
+        if (initialForum != null) viewModel.cargarDiscusiones(initialForum.id_forum)
+    }
 
     when (val state = navState) {
         ForumNavState.ForumList -> ForumListContent(
@@ -94,8 +105,6 @@ fun ForumScreen(
         )
     }
 }
-
-// ── 1. Forum list ──────────────────────────────────────────────────────────
 
 @Composable
 private fun ForumListContent(
@@ -148,7 +157,6 @@ private fun ForumListContent(
         }
     ) { padding ->
     Column(Modifier.fillMaxSize().padding(padding)) {
-        // ── Header ────────────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -195,7 +203,6 @@ private fun ForumListContent(
             }
         }
 
-        // ── Buscador ──────────────────────────────────────────────────
         OutlinedTextField(
             value = busqueda,
             onValueChange = { busqueda = it },
@@ -292,8 +299,6 @@ private fun ForumCard(forum: ForumOut, gameName: String?, onClick: () -> Unit) {
     }
 }
 
-// ── 2. Discussion list ─────────────────────────────────────────────────────
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DiscussionListContent(
@@ -348,7 +353,7 @@ private fun DiscussionListContent(
         AlertDialog(
             onDismissRequest = { discAEliminar = null },
             title = { Text("Eliminar publicación") },
-            text = { Text("¿Seguro que quieres eliminar \"${disc.name}\"?") },
+            text = { Text("¿Seguro que quieres eliminar \"${disc.name}\"? Esta acción no se puede deshacer.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.eliminarDiscusion(disc.id_discussion)
@@ -384,7 +389,6 @@ private fun DiscussionListContent(
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            // Search bar
             OutlinedTextField(
                 value = busqueda,
                 onValueChange = { busqueda = it },
@@ -454,7 +458,6 @@ private fun DiscussionCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column {
-            // Optional image banner
             if (imageUrl != null) {
                 AsyncImage(
                     model = imageUrl,
@@ -469,7 +472,6 @@ private fun DiscussionCard(
             }
 
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                // Title + delete
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                     Text(
                         discussion.name,
@@ -486,7 +488,6 @@ private fun DiscussionCard(
                     }
                 }
 
-                // Content preview
                 if (!discussion.comments.isNullOrBlank()) {
                     Spacer(Modifier.height(4.dp))
                     Text(
@@ -501,28 +502,8 @@ private fun DiscussionCard(
 
                 Spacer(Modifier.height(10.dp))
 
-                // Author + date
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            (discussion.author_username ?: "?").take(1).uppercase(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        discussion.author_username ?: "Anónimo",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium
-                    )
+                    AuthorChip(discussion.author_username, resolveAppImageUrl(discussion.author_image))
                     if (discussion.created_at != null) {
                         Text(
                             " · ${discussion.created_at}",
@@ -536,7 +517,6 @@ private fun DiscussionCard(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                 Spacer(Modifier.height(8.dp))
 
-                // Like / Dislike / Reply count
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     VoteButton(
                         icon = Icons.Default.ThumbUp,
@@ -565,7 +545,12 @@ private fun DiscussionCard(
     }
 }
 
-// ── 3. Discussion detail ───────────────────────────────────────────────────
+private fun List<PostReplyOut>.toThreadedOrder(): List<PostReplyOut> {
+    val byParent = groupBy { it.id_parent_reply }
+    fun flatten(comment: PostReplyOut): List<PostReplyOut> =
+        listOf(comment) + (byParent[comment.id_reply] ?: emptyList()).flatMap { flatten(it) }
+    return filter { it.id_parent_reply == null }.flatMap { flatten(it) }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -575,7 +560,8 @@ private fun DiscussionDetailContent(
     isAdmin: Boolean,
     onVolver: () -> Unit,
 ) {
-    val replies by viewModel.replies.collectAsState()
+    val repliesRaw by viewModel.replies.collectAsState()
+    val replies = repliesRaw.toThreadedOrder()
     val myVotes by viewModel.myVotes.collectAsState()
     val myCommentVotes by viewModel.myCommentVotes.collectAsState()
     val repliesLoading by viewModel.repliesLoading.collectAsState()
@@ -585,11 +571,15 @@ private fun DiscussionDetailContent(
     val discussions by viewModel.discussions.collectAsState()
     val liveDisc = discussions.find { it.id_discussion == discussion.id_discussion } ?: discussion
     val liveMyVote = myVotes[liveDisc.id_discussion] ?: 0
-
     var mostrarResponder by remember { mutableStateOf(false) }
     var replyingToComment by remember { mutableStateOf<PostReplyOut?>(null) }
     var isSendingReply by remember { mutableStateOf(false) }
+    var expandedImageUrl by remember { mutableStateOf<String?>(null) }
     val imageUrl = resolveAppImageUrl(liveDisc.image)
+
+    expandedImageUrl?.let { url ->
+        ImageLightbox(imageUrl = url, onDismiss = { expandedImageUrl = null })
+    }
 
     if (mostrarResponder) {
         ComentarDialog(
@@ -642,7 +632,6 @@ private fun DiscussionDetailContent(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
-            // ── Post body ────────────────────────────────────────────
             item {
                 Column {
                     if (imageUrl != null) {
@@ -658,7 +647,7 @@ private fun DiscussionDetailContent(
                         Text(liveDisc.name, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, lineHeight = 26.sp)
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            AuthorChip(liveDisc.author_username)
+                            AuthorChip(liveDisc.author_username, resolveAppImageUrl(liveDisc.author_image))
                             if (liveDisc.created_at != null) {
                                 Text(
                                     " · ${liveDisc.created_at}",
@@ -677,7 +666,6 @@ private fun DiscussionDetailContent(
                             )
                         }
                         Spacer(Modifier.height(16.dp))
-                        // Vote bar
                         Card(
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(
@@ -714,7 +702,6 @@ private fun DiscussionDetailContent(
                 }
             }
 
-            // ── Comments header ───────────────────────────────────────
             item {
                 Text(
                     "${liveDisc.reply_count} comentarios",
@@ -748,15 +735,14 @@ private fun DiscussionDetailContent(
                             replyingToComment = reply
                             mostrarResponder = true
                         },
-                        onDelete = { viewModel.eliminarReply(liveDisc.id_discussion, reply.id_reply) }
+                        onDelete = { viewModel.eliminarReply(liveDisc.id_discussion, reply.id_reply) },
+                        onImageClick = { url -> expandedImageUrl = url }
                     )
                 }
             }
         }
     }
 }
-
-// ── Shared composables ─────────────────────────────────────────────────────
 
 @Composable
 private fun VoteButton(
@@ -813,23 +799,61 @@ private fun HonorChip(score: Int) {
 }
 
 @Composable
-private fun AuthorChip(username: String?) {
+private fun AuthorChip(username: String?, profileImageUrl: String? = null) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
-                .size(22.dp)
+                .size(26.dp)
+                .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                (username ?: "?").take(1).uppercase(),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            if (profileImageUrl != null) {
+                AsyncImage(
+                    model = profileImageUrl,
+                    imageLoader = LocalAppImageLoader.current,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape)
+                )
+            } else {
+                Text(
+                    (username ?: "?").take(1).uppercase(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
         }
         Spacer(Modifier.width(6.dp))
         Text(username ?: "Anónimo", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun ImageLightbox(imageUrl: String, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = imageUrl,
+                imageLoader = LocalAppImageLoader.current,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.85f)
+                    .padding(24.dp)
+            )
+        }
     }
 }
 
@@ -841,66 +865,147 @@ private fun CommentCard(
     onVote: (Int) -> Unit,
     onReply: () -> Unit,
     onDelete: () -> Unit,
+    onImageClick: (String) -> Unit = {},
 ) {
     val imageUrl = resolveAppImageUrl(reply.image)
+    val profileImageUrl = resolveAppImageUrl(reply.author_image)
     val isNested = reply.id_parent_reply != null
-    val startPadding = if (isNested) 40.dp else 16.dp
+    val startPadding = if (isNested) 36.dp else 12.dp
+
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Eliminar comentario") },
+            text = { Text("¿Seguro que quieres eliminar este comentario? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = { showDeleteConfirm = false; onDelete() }) {
+                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancelar") }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = startPadding, end = 16.dp, top = 6.dp, bottom = 2.dp)
+            .padding(start = startPadding, end = 12.dp, top = 8.dp, bottom = 2.dp)
     ) {
-        // Threading indicator for nested comments
         if (isNested && reply.parent_author != null) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 4.dp)
+                modifier = Modifier.padding(start = 36.dp, bottom = 3.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(14.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                            RoundedCornerShape(1.dp)
-                        )
+                Icon(
+                    Icons.AutoMirrored.Filled.Reply,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
                 Text(
-                    "↩ ${reply.parent_author}",
+                    "respondiendo a ${reply.parent_author}",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
+                    fontStyle = FontStyle.Italic,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                 )
             }
         }
 
-        // Author row
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            AuthorChip(reply.author_username)
-            if (reply.created_at != null) {
-                Text(
-                    " · ${reply.created_at}",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                if (profileImageUrl != null) {
+                    AsyncImage(
+                        model = profileImageUrl,
+                        imageLoader = LocalAppImageLoader.current,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                    )
+                } else {
+                    Text(
+                        (reply.author_username ?: "?").take(1).uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
-            Spacer(Modifier.weight(1f))
-            if (canDelete) {
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    reply.author_username ?: "Anónimo",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                if (reply.created_at != null) {
+                    Text(
+                        reply.created_at,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Opciones",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Responder") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Reply,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        onClick = { menuExpanded = false; onReply() }
+                    )
+                    if (canDelete) {
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Eliminar", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            onClick = { menuExpanded = false; showDeleteConfirm = true }
+                        )
+                    }
                 }
             }
         }
 
         Spacer(Modifier.height(6.dp))
 
-        // Content bubble
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.wrapContentWidth(Alignment.Start).widthIn(min = 80.dp, max = 320.dp)
         ) {
             Column {
                 if (imageUrl != null) {
@@ -908,25 +1013,28 @@ private fun CommentCard(
                         model = imageUrl,
                         imageLoader = LocalAppImageLoader.current,
                         contentDescription = null,
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 200.dp)
-                            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                            .widthIn(max = 300.dp)
+                            .heightIn(max = 180.dp)
+                            .padding(horizontal = 10.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onImageClick(imageUrl) }
                     )
                 }
                 Text(
                     reply.content,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                 )
             }
         }
 
-        // Votes + reply button
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 2.dp, top = 4.dp)
+        ) {
             VoteButton(
                 icon = Icons.Default.ThumbUp,
                 count = reply.likes,
@@ -934,7 +1042,7 @@ private fun CommentCard(
                 activeColor = MaterialTheme.colorScheme.primary,
                 onClick = { onVote(1) }
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
             VoteButton(
                 icon = Icons.Default.ThumbDown,
                 count = reply.dislikes,
@@ -942,23 +1050,14 @@ private fun CommentCard(
                 activeColor = MaterialTheme.colorScheme.error,
                 onClick = { onVote(-1) }
             )
-            Spacer(Modifier.weight(1f))
-            TextButton(
-                onClick = onReply,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-            ) {
-                Text("Responder", fontSize = 12.sp)
-            }
         }
 
         HorizontalDivider(
-            modifier = Modifier.padding(top = 2.dp),
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+            modifier = Modifier.padding(top = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
         )
     }
 }
-
-// ── Dialogs ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun CrearDiscusionDialog(
@@ -1073,7 +1172,6 @@ private fun CrearForoDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Game selector
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { menuJuegoExpandido = true },
@@ -1103,7 +1201,6 @@ private fun CrearForoDialog(
                     }
                 }
 
-                // Forum type (only admins can create official forums)
                 if (isAdmin) {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(

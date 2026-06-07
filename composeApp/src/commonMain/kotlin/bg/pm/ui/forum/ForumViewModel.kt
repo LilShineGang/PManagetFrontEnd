@@ -25,11 +25,9 @@ class ForumViewModel : ViewModel() {
     private val _replies = MutableStateFlow<List<PostReplyOut>>(emptyList())
     val replies: StateFlow<List<PostReplyOut>> = _replies.asStateFlow()
 
-    // discussionId → my vote (0 / 1 / -1)
     private val _myVotes = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val myVotes: StateFlow<Map<Int, Int>> = _myVotes.asStateFlow()
 
-    // replyId → my vote on that comment (0 / 1 / -1)
     private val _myCommentVotes = MutableStateFlow<Map<Int, Int>>(emptyMap())
     val myCommentVotes: StateFlow<Map<Int, Int>> = _myCommentVotes.asStateFlow()
 
@@ -44,15 +42,12 @@ class ForumViewModel : ViewModel() {
 
     fun clearError() { _actionError.value = null }
 
-    // ── Discussions ───────────────────────────────────────────────────────
-
     fun cargarDiscusiones(forumId: Int) {
         val token = SessionManager.accessToken ?: return
         _discussionsLoading.value = true
         viewModelScope.launch {
             try {
                 _discussions.value = ApiService.obtenerDiscusionesPorForo(forumId, token)
-                // Pre-load my votes for all visible discussions
                 val votes = mutableMapOf<Int, Int>()
                 _discussions.value.forEach { d ->
                     try {
@@ -108,13 +103,9 @@ class ForumViewModel : ViewModel() {
         }
     }
 
-    // ── Votes ─────────────────────────────────────────────────────────────
-
     fun votar(discussion: DiscussionOut, vote: Int) {
         val token = SessionManager.accessToken ?: return
         val id = discussion.id_discussion
-
-        // Optimistic local update
         val currentVote = _myVotes.value[id] ?: 0
         val newVote = if (currentVote == vote) 0 else vote
         val likeDelta = countLikeDelta(currentVote, newVote)
@@ -137,7 +128,6 @@ class ForumViewModel : ViewModel() {
                     else d
                 }
             } catch (_: Exception) {
-                // Revert on failure
                 _myVotes.value = _myVotes.value + (id to currentVote)
                 _discussions.value = _discussions.value.map { d ->
                     if (d.id_discussion == id)
@@ -148,8 +138,6 @@ class ForumViewModel : ViewModel() {
             }
         }
     }
-
-    // ── Replies ───────────────────────────────────────────────────────────
 
     fun cargarReplies(discussionId: Int) {
         val token = SessionManager.accessToken ?: return
@@ -249,7 +237,6 @@ class ForumViewModel : ViewModel() {
                     reply = ApiService.subirImagenRespuesta(discussionId, reply.id_reply, upload, token)
                 }
                 _replies.value = _replies.value + reply
-                // Increment reply_count in the discussion list
                 _discussions.value = _discussions.value.map { d ->
                     if (d.id_discussion == discussionId) d.copy(reply_count = d.reply_count + 1) else d
                 }
@@ -277,8 +264,6 @@ class ForumViewModel : ViewModel() {
             }
         }
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
 
     private fun countLikeDelta(old: Int, new: Int): Int = when {
         old != 1 && new == 1 -> +1
