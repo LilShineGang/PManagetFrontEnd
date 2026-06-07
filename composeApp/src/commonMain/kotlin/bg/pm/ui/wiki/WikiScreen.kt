@@ -63,7 +63,6 @@ fun WikiScreen(
 
     Column(Modifier.fillMaxSize()) {
 
-        // ── Header prominente ────────────────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -110,7 +109,6 @@ fun WikiScreen(
             }
         }
 
-        // ── Barra de búsqueda + botón de filtro ─────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -176,7 +174,6 @@ fun WikiScreen(
             }
         }
 
-        // ── Chip de filtro activo ────────────────────────────────────────
         if (categoriaFiltro != null) {
             Row(
                 modifier = Modifier
@@ -212,7 +209,6 @@ fun WikiScreen(
             }
         }
 
-        // ── Lista de juegos ──────────────────────────────────────────────
         if (juegosFiltrados.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -385,7 +381,6 @@ fun WikiGameScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // ── Buscador sutil dentro de la wiki ─────────────────────────
             OutlinedTextField(
                 value = wikiSearch,
                 onValueChange = { wikiSearch = it },

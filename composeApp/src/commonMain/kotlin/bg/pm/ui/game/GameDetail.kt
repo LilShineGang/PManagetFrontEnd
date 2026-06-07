@@ -131,7 +131,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
 
         Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
 
-            // ── Hero ─────────────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -194,7 +193,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
                 }
             }
 
-            // ── Info Card ────────────────────────────────────────────────
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -252,7 +250,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
                 )
             }
 
-            // ── Logros ───────────────────────────────────────────────────
             Spacer(Modifier.height(8.dp))
 
             CollapsibleSectionHeader(
@@ -314,7 +311,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
                 }
             }
 
-            // ── Wiki ─────────────────────────────────────────────────────
             Spacer(Modifier.height(8.dp))
 
             CollapsibleSectionHeader(
@@ -343,7 +339,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
                         )
                     }
-                    // Buscador Wiki
                     OutlinedTextField(
                         value = wikiSearch,
                         onValueChange = { wikiSearch = it },
@@ -390,7 +385,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
                 }
             }
 
-            // ── Builds ───────────────────────────────────────────────────
             Spacer(Modifier.height(8.dp))
 
             CollapsibleSectionHeader(
@@ -419,7 +413,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
                         )
                     }
-                    // Buscador Builds
                     OutlinedTextField(
                         value = buildSearch,
                         onValueChange = { buildSearch = it },
@@ -469,7 +462,6 @@ fun GameDetail(juego: GameOut, onVolver: () -> Unit) {
             Spacer(Modifier.height(32.dp))
         }
 
-        // ── Botón volver flotante ────────────────────────────────────────
         Box(
             modifier = Modifier
                 .statusBarsPadding()

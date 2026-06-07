@@ -42,7 +42,6 @@ import kotlinx.coroutines.launch
 import bg.pm.network.ApiService
 import bg.pm.network.AchievementOut
 import bg.pm.network.BuildOut
-import bg.pm.network.ChatOut
 import bg.pm.network.ForumOut
 import bg.pm.network.GameIn
 import bg.pm.network.GameOut
@@ -54,6 +53,7 @@ import bg.pm.network.SessionManager
 import bg.pm.pickImageFile
 import bg.pm.ui.common.LocalAppImageLoader
 import bg.pm.ui.common.RuneBrand
+import bg.pm.ui.chat.ChatScreen
 import bg.pm.ui.forum.ForumScreen
 import bg.pm.ui.game.GameDetail
 import bg.pm.ui.wiki.WikiScreen
@@ -77,13 +77,13 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
     val perfil by viewModel.perfil.collectAsState()
     val juegos by viewModel.juegos.collectAsState()
     val foros by viewModel.foros.collectAsState()
-    val chats by viewModel.chats.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val isAdmin by viewModel.isAdmin.collectAsState()
     val likedGameIds by viewModel.likedGameIds.collectAsState()
     val juegosLiked by viewModel.juegosLiked.collectAsState()
     
+    var foroDesdeInicio by remember { mutableStateOf<ForumOut?>(null) }
     var mostrarDialogoCrear by remember { mutableStateOf(false) }
     var menuPerfilExpandido by remember { mutableStateOf(false) }
     var juegoAEliminar by remember { mutableStateOf<GameOut?>(null) }
@@ -110,7 +110,6 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
         return
     }
 
-    // ── Diálogo crear juego ───────────────────────────────────────────
     juegoAEliminar?.let { juego ->
         AlertDialog(
             onDismissRequest = { juegoAEliminar = null },
@@ -306,17 +305,21 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                             }
                             item { SectionHeader("Foros") }
                             if (foros.isEmpty()) { item { EmptyHint("No hay foros disponibles") } }
-                            else { items(foros) { ForoCard(it) } }
+                            else {
+                                items(foros) { foro ->
+                                    ForoCard(foro) {
+                                        foroDesdeInicio = foro
+                                        seccionActual = Seccion.Comunidad
+                                    }
+                                }
+                            }
 
-                            item { SectionHeader("Chats") }
-                            if (chats.isEmpty()) { item { EmptyHint("No hay chats disponibles") } }
-                            else { items(chats) { ChatCard(it) } }
+
                         }
                         Seccion.Juegos -> LazyColumn(
                             modifier = Modifier.fillMaxSize().padding(paddingValues),
                             contentPadding = PaddingValues(bottom = 24.dp)
                         ) {
-                            // ── Header con degradado ──────────────────────────
                             item {
                                 Box(
                                     modifier = Modifier
@@ -381,7 +384,6 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                                     }
                                 }
                             }
-                            // ── Barra búsqueda + botón filtro ────────────────
                             item {
                                 Row(
                                     modifier = Modifier
@@ -446,7 +448,6 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                                     }
                                 }
                             }
-                            // ── Chip filtro activo ───────────────────────────
                             if (juegoCategoria != null) {
                                 item {
                                     Row(
@@ -483,7 +484,6 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                                     }
                                 }
                             }
-                            // ── Lista de juegos ──────────────────────────────
                             if (juegosFiltrados.isEmpty()) {
                                 item {
                                     EmptyHint(
@@ -513,12 +513,15 @@ fun PantallaPrincipal(onCerrarSesion: () -> Unit) {
                         Seccion.Wiki -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
                             WikiScreen(juegos = juegos, isAdmin = isAdmin)
                         }
-                        Seccion.Mensajes -> PlaceholderPantalla("Chats")
+                        Seccion.Mensajes -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
+                            ChatScreen()
+                        }
                         Seccion.Comunidad -> Box(Modifier.fillMaxSize().padding(paddingValues)) {
                             ForumScreen(
                                 forums = foros,
                                 juegos = juegos,
                                 isAdmin = isAdmin,
+                                initialForum = foroDesdeInicio.also { foroDesdeInicio = null },
                                 onForoCreado = { viewModel.agregarForo(it) },
                             )
                         }
@@ -640,7 +643,6 @@ private fun PerfilScreen(
         misFavoritos = ApiService.obtenerFavoritos(token)
     }
 
-    // Restore banner state from DB value on initial load
     LaunchedEffect(perfilActual?.banner) {
         val b = perfilActual?.banner ?: return@LaunchedEffect
         if (b.startsWith("#")) {
@@ -652,7 +654,6 @@ private fun PerfilScreen(
         }
     }
 
-    // ── Diálogo editar ────────────────────────────────────────────────
     if (showEdit) {
         EditPerfilDialog(
             perfil = perfilActual,
@@ -726,7 +727,6 @@ private fun PerfilScreen(
         )
     }
 
-    // ── Diálogo confirmar borrado ─────────────────────────────────────
     if (showConfirmDelete) {
         AlertDialog(
             onDismissRequest = { showConfirmDelete = false },
@@ -778,13 +778,11 @@ private fun PerfilScreen(
                 .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // ── Banner + avatar superpuesto ───────────────────────────
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(160.dp)
             ) {
-                // Banner (imagen, color sólido o degradado por defecto)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -815,7 +813,6 @@ private fun PerfilScreen(
                                 )
                         )
                     }
-                    // Settings – editar perfil (sombra)
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -834,7 +831,6 @@ private fun PerfilScreen(
                         )
                     }
                 }
-                // Avatar superpuesto
                 Box(
                     modifier = Modifier
                         .size(100.dp)
@@ -898,7 +894,6 @@ private fun PerfilScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Estadísticas ──────────────────────────────────────────
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -926,7 +921,6 @@ private fun PerfilScreen(
                     Spacer(Modifier.height(8.dp))
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                     Spacer(Modifier.height(8.dp))
-                    // Honor
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -961,7 +955,6 @@ private fun PerfilScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Logros desbloqueados ──────────────────────────────────
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -991,7 +984,6 @@ private fun PerfilScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Actividad (builds) ────────────────────────────────────
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1058,7 +1050,6 @@ private fun PerfilScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
 
-                // ── Botón cerrar sesión ───────────────────────────────
                 OutlinedButton(
                     onClick = onCerrarSesion,
                     modifier = Modifier.fillMaxWidth(),
@@ -1463,14 +1454,12 @@ private fun GameCarouselCard(
                     modifier = Modifier.fillMaxSize(),
                     onError = { println("Coil error loading '$imageUrl': ${it.result.throwable}") }
                 )
-                // overlay oscuro para legibilidad del texto
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.40f))
                 )
             } else {
-                // placeholder letra grande
                 Text(
                     text = juego.name.first().uppercaseChar().toString(),
                     fontSize = 72.sp,
@@ -1560,11 +1549,12 @@ private fun GameCarouselCard(
 }
 
 @Composable
-private fun ForoCard(foro: ForumOut) {
+private fun ForoCard(foro: ForumOut, onClick: () -> Unit = {}) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp),
+            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
@@ -1610,58 +1600,6 @@ private fun ForoCard(foro: ForumOut) {
 }
 
 @Composable
-private fun ChatCard(chat: ChatOut) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        MaterialTheme.colorScheme.tertiaryContainer,
-                        RoundedCornerShape(8.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "#",
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = chat.content,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2
-                )
-                chat.timestamp?.let {
-                    Text(
-                        text = it,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
 private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn, String?) -> Unit) {
     var nombre by remember { mutableStateOf("") }
     var genero by remember { mutableStateOf("") }
@@ -1695,7 +1633,6 @@ private fun CrearJuegoDialog(onDismiss: () -> Unit, onCreate: (GameIn, String?) 
                     label = { Text("Categoría *") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                // Selector de imagen
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         "Imagen (opcional)",
