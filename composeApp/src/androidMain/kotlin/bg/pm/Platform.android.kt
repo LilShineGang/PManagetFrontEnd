@@ -10,7 +10,7 @@ class AndroidPlatform : Platform {
 
 actual fun getPlatform(): Platform = AndroidPlatform()
 
-actual fun getBaseUrl(): String = "http://10.160.81.1:8000"
+actual fun getBaseUrl(): String = "http://10.161.204.208:8000"
 
 actual suspend fun readPickedImageUpload(imagePath: String): PickedImageUpload? {
     val context = ImagePickerHolder.appContext ?: return null
